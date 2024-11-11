@@ -1,6 +1,9 @@
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
+// 동적 라우팅 설정 추가
+export const dynamic = 'force-dynamic'
+
 // 환경 변수 타입 정의
 declare global {
   namespace NodeJS {
@@ -38,23 +41,24 @@ interface AuthCheckResponse {
   error?: string;
 }
 
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD
-
+// 환경 변수 가져오기를 함수 내부로 이동
 export async function POST(request: NextRequest): Promise<NextResponse<LoginResponse | LogoutResponse>> {
   const path = request.nextUrl.pathname
   
   if (path.endsWith('/login')) {
     try {
       const { username, password }: LoginRequest = await request.json()
+      const adminUsername = process.env.ADMIN_USERNAME
+      const adminPassword = process.env.ADMIN_PASSWORD
     
-      if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-        // 세션 쿠키 설정
-        cookies().set('auth', 'authenticated', {
+      if (username === adminUsername && password === adminPassword) {
+        // 쿠키 스토어 사용
+        const cookieStore = cookies()
+        cookieStore.set('auth', 'authenticated', {
           httpOnly: true,
           secure: process.env.NODE_ENV === 'production',
           sameSite: 'lax',
-          maxAge: 60 * 60 * 24 * 30 // 24시간 1month
+          maxAge: 60 * 60 * 24 * 30 // 30일
         })
         
         return NextResponse.json({
@@ -82,7 +86,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<LoginResp
   }
   
   if (path.endsWith('/logout')) {
-    cookies().delete('auth')
+    const cookieStore = cookies()
+    cookieStore.delete('auth')
     return NextResponse.json({ success: true })
   }
   
@@ -99,11 +104,12 @@ export async function GET(request: NextRequest): Promise<NextResponse<AuthCheckR
   const path = request.nextUrl.pathname
   
   if (path.endsWith('/check')) {
-    const authCookie = cookies().get('auth')
+    const cookieStore = cookies()
+    const authCookie = cookieStore.get('auth')
     
     if (authCookie?.value === 'authenticated') {
       return NextResponse.json({
-        user: { username: ADMIN_USERNAME }
+        user: { username: process.env.ADMIN_USERNAME || '' }
       })
     }
     

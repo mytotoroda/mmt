@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
+export const dynamic = 'force-dynamic'  // 추가
+
 // 상수 정의
 const PROTECTED_PATHS = [
   '/meme-coins',
@@ -27,36 +29,47 @@ function isProtectedPath(pathname: string): boolean {
  * 미들웨어 핸들러
  */
 export function middleware(request: NextRequest): NextResponse {
-  // 현재 요청의 URL 정보 가져오기
-  const { pathname } = request.nextUrl
-  
-  // 인증 쿠키 확인
-  const authCookie = request.cookies.get('auth')
-  
-  // API 경로는 제외 (API 라우트는 별도의 인증 처리)
-  if (pathname.startsWith('/api')) {
+  try {
+    // 현재 요청의 URL 정보 가져오기
+    const { pathname } = request.nextUrl
+    
+    // 인증 쿠키 확인
+    const authCookie = request.cookies.get('auth')
+    
+    // API 경로는 제외 (API 라우트는 별도의 인증 처리)
+    if (pathname.startsWith('/api')) {
+      return NextResponse.next()
+    }
+
+    // public 폴더의 정적 파일 요청은 제외
+    if (pathname.startsWith('/public/')) {
+      return NextResponse.next()
+    }
+    
+    // 로그인이 필요한 페이지 체크
+    if (isProtectedPath(pathname)) {
+      // 인증되지 않은 경우
+      if (!authCookie?.value || authCookie.value !== 'authenticated') {
+        // 현재 접근하려던 URL을 'from' 쿼리 파라미터로 저장
+        const url = new URL('/login', request.url)
+        url.searchParams.set('from', pathname)
+        return NextResponse.redirect(url)
+      }
+    }
+    
+    // 이미 로그인한 사용자가 로그인 페이지에 접근하는 경우
+    if (pathname === '/login' && authCookie?.value === 'authenticated') {
+      // from 파라미터가 있으면 해당 페이지로, 없으면 홈으로 리다이렉트
+      const from = request.nextUrl.searchParams.get('from')
+      const safeRedirectPath = from && isProtectedPath(from) ? from : '/'
+      return NextResponse.redirect(new URL(safeRedirectPath, request.url))
+    }
+    
+    return NextResponse.next()
+  } catch (error) {
+    console.error('Middleware error:', error)
     return NextResponse.next()
   }
-
-  // 로그인이 필요한 페이지 체크
-  if (isProtectedPath(pathname)) {
-    // 인증되지 않은 경우
-    if (!authCookie?.value) {
-      // 현재 접근하려던 URL을 'from' 쿼리 파라미터로 저장
-      const url = new URL('/login', request.url)
-      url.searchParams.set('from', pathname)
-      return NextResponse.redirect(url)
-    }
-  }
-
-  // 이미 로그인한 사용자가 로그인 페이지에 접근하는 경우
-  if (pathname === '/login' && authCookie?.value) {
-    // from 파라미터가 있으면 해당 페이지로, 없으면 홈으로 리다이렉트
-    const from = request.nextUrl.searchParams.get('from')
-    return NextResponse.redirect(new URL(from || '/', request.url))
-  }
-
-  return NextResponse.next()
 }
 
 /**
