@@ -52,6 +52,7 @@ interface GeneratorOptions {
   batchSize: number;
 }
 
+
 interface WalletData {
   index: number;
   publicKey: string;

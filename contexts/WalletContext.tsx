@@ -1,6 +1,9 @@
-//ts 완료
 'use client'
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { Connection, clusterApiUrl } from '@solana/web3.js';
+
+// Network 타입 정의
+export type NetworkType = 'mainnet-beta' | 'devnet';
 
 // Phantom 지갑 타입 정의
 interface PhantomWallet {
@@ -24,6 +27,8 @@ interface WalletContextValue {
   publicKey: string | null;
   connectWallet: () => Promise<void>;
   disconnectWallet: () => Promise<void>;
+  network: NetworkType;
+  connection: Connection;
 }
 
 // Provider Props 타입 정의
@@ -31,34 +36,58 @@ interface WalletProviderProps {
   children: ReactNode;
 }
 
+// 상수 정의
+const DEFAULT_NETWORK: NetworkType = 'devnet';
+
+// 유틸리티 함수들
+const getNetwork = (): NetworkType => {
+  const network = process.env.NEXT_PUBLIC_NETWORK as NetworkType;
+  if (network !== 'mainnet-beta' && network !== 'devnet') {
+    return DEFAULT_NETWORK;
+  }
+  return network;
+};
+
+const getEndpoint = (network: NetworkType): string => {
+  return clusterApiUrl(network);
+};
+
+const createConnection = (network: NetworkType): Connection => {
+  const endpoint = getEndpoint(network);
+  return new Connection(endpoint, 'confirmed');
+};
+
 // 컨텍스트 생성
 const WalletContext = createContext<WalletContextValue | null>(null);
 
 export function WalletProvider({ children }: WalletProviderProps) {
   const [wallet, setWallet] = useState<PhantomWallet | null>(null);
   const [publicKey, setPublicKey] = useState<string | null>(null);
+  const network = getNetwork();
+  const [connection] = useState(() => createConnection(network));
 
   // Phantom 지갑 이벤트 리스너 설정
   useEffect(() => {
     const { solana } = window;
     if (solana) {
       setWallet(solana);
-      solana.on('connect', () => {
-        console.log("Wallet connected");
+
+      const handleConnect = () => {
+        console.log(`Wallet connected on ${network}`);
         if (solana.publicKey) {
           const publicKeyString = solana.publicKey.toString();
           setPublicKey(publicKeyString);
           localStorage.setItem('walletConnected', 'true');
         }
-      });
+      };
 
-      solana.on('disconnect', () => {
+      const handleDisconnect = () => {
         console.log("Wallet disconnected");
         setPublicKey(null);
         localStorage.removeItem('walletConnected');
-      });
+      };
 
-      solana.on('accountChanged', (publicKey: { toString: () => string } | null) => {
+      const handleAccountChanged = (publicKey: { toString: () => string } | null) => {
         if (publicKey) {
           console.log("Account changed:", publicKey.toString());
           setPublicKey(publicKey.toString());
@@ -67,30 +96,33 @@ export function WalletProvider({ children }: WalletProviderProps) {
           setPublicKey(null);
           localStorage.removeItem('walletConnected');
         }
-      });
-    }
+      };
 
-    return () => {
-      if (solana) {
+      solana.on('connect', handleConnect);
+      solana.on('disconnect', handleDisconnect);
+      solana.on('accountChanged', handleAccountChanged);
+
+      // 컴포넌트 언마운트 시 이벤트 리스너 제거
+      return () => {
         solana.removeAllListeners('connect');
         solana.removeAllListeners('disconnect');
         solana.removeAllListeners('accountChanged');
-      }
-    };
-  }, []);
+      };
+    }
+  }, [network]);
 
   // 초기 자동 연결
   useEffect(() => {
     const autoConnect = async (): Promise<void> => {
-      const { solana } = window;
-      if (solana && localStorage.getItem('walletConnected') === 'true') {
-        try {
+      try {
+        const { solana } = window;
+        if (solana && localStorage.getItem('walletConnected') === 'true') {
           const response = await solana.connect({ onlyIfTrusted: true });
           setPublicKey(response.publicKey.toString());
-        } catch (error) {
-          console.error("자동 연결 실패:", error);
-          localStorage.removeItem('walletConnected');
         }
+      } catch (error) {
+        console.error("자동 연결 실패:", error);
+        localStorage.removeItem('walletConnected');
       }
     };
 
@@ -100,6 +132,12 @@ export function WalletProvider({ children }: WalletProviderProps) {
   const connectWallet = async (): Promise<void> => {
     try {
       if (wallet) {
+        if (network === 'mainnet-beta') {
+          const confirm = window.confirm(
+            '메인넷에 연결하시겠습니까? 실제 SOL이 사용될 수 있습니다.'
+          );
+          if (!confirm) return;
+        }
         const response = await wallet.connect();
         setPublicKey(response.publicKey.toString());
         localStorage.setItem('walletConnected', 'true');
@@ -130,7 +168,9 @@ export function WalletProvider({ children }: WalletProviderProps) {
         wallet, 
         publicKey, 
         connectWallet, 
-        disconnectWallet 
+        disconnectWallet,
+        network,
+        connection
       }}
     >
       {children}
@@ -138,6 +178,7 @@ export function WalletProvider({ children }: WalletProviderProps) {
   );
 }
 
+// Hook
 export function useWallet(): WalletContextValue {
   const context = useContext(WalletContext);
   if (!context) {

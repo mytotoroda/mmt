@@ -9,6 +9,7 @@ interface TokenMetadataLinkProps {
   tokenId: string
 }
 
+
 const TokenMetadataLink: React.FC<TokenMetadataLinkProps> = ({ tokenId }) => {
   const handleClick = (): void => {
     window.open(`https://explorer.solana.com/address/${tokenId}/metadata?cluster=devnet`, '_blank')
