@@ -51,10 +51,9 @@ useEffect(() => {
   const alchemyUrl = network === 'mainnet-beta'
     ? process.env.NEXT_PUBLIC_MAINNET_RPC_URL
     : "https://api.devnet.solana.com";  // devnet은 기본 URL 사용
-
+    
   const conn = new web3.Connection(alchemyUrl, {
     commitment: 'confirmed',
-    confirmTransactionInitialTimeout: 60000,
     // Rate limit 방지를 위한 설정 추가
     httpHeaders: {
       'Cache-Control': 'no-cache',
@@ -65,134 +64,121 @@ useEffect(() => {
   setConnection(conn);
 }, [network]);
 
+
+
  const createToken = async (name: string, symbol: string, supply: string): Promise<void> => {
-  setIsLoading(true);
-  try {
-    if (!connection || !wallet || !publicKey) {
-      throw new Error('Initialization check failed');
-    }
+   setIsLoading(true);
+   try {
+     if (!connection || !wallet || !publicKey) {
+       throw new Error('Initialization check failed');
+     }
 
-    // 메인넷 경고
-    if (network === 'mainnet-beta') {
-      const confirm = window.confirm(
-        '메인넷에서 토큰을 생성하시겠습니까? 실제 SOL이 사용됩니다.'
-      );
-      if (!confirm) {
-        setIsLoading(false);
-        return;
-      }
-    }
+     // 메인넷 경고
+     if (network === 'mainnet-beta') {
+       const confirm = window.confirm(
+         '메인넷에서 토큰을 생성하시겠습니까? 실제 SOL이 사용됩니다.'
+       );
+       if (!confirm) {
+         setIsLoading(false);
+         return;
+       }
+     }
 
-    // 트랜잭션 재시도 로직 추가
-    const retryCreateToken = async (retries = 3) => {
-      for (let i = 0; i < retries; i++) {
-        try {
-          const mintKeypair = web3.Keypair.generate();
-          const decimals = 9;
+     // 민트 계정 생성
+     const mintKeypair = web3.Keypair.generate()
+     const decimals = 9
 
-          // 각 RPC 호출 사이에 딜레이 추가
-          const lamports = await token.getMinimumBalanceForRentExemptMint(connection);
-          await new Promise(resolve => setTimeout(resolve, 1000));
+     // 필요한 lamports 계산
+     const lamports = await token.getMinimumBalanceForRentExemptMint(connection)
 
-          const transaction = new web3.Transaction().add(
-            web3.SystemProgram.createAccount({
-              fromPubkey: new web3.PublicKey(publicKey),
-              newAccountPubkey: mintKeypair.publicKey,
-              space: token.MINT_SIZE,
-              lamports: lamports,
-              programId: token.TOKEN_PROGRAM_ID,
-            }),
-            token.createInitializeMintInstruction(
-              mintKeypair.publicKey,
-              decimals,
-              new web3.PublicKey(publicKey),
-              new web3.PublicKey(publicKey),
-              token.TOKEN_PROGRAM_ID
-            )
-          );
+     // 토큰 생성 트랜잭션
+     const transaction = new web3.Transaction().add(
+       web3.SystemProgram.createAccount({
+         fromPubkey: new web3.PublicKey(publicKey),
+         newAccountPubkey: mintKeypair.publicKey,
+         space: token.MINT_SIZE,
+         lamports: lamports,
+         programId: token.TOKEN_PROGRAM_ID,
+       }),
+       token.createInitializeMintInstruction(
+         mintKeypair.publicKey,
+         decimals,
+         new web3.PublicKey(publicKey),
+         new web3.PublicKey(publicKey),
+         token.TOKEN_PROGRAM_ID
+       )
+     )
 
-          await new Promise(resolve => setTimeout(resolve, 1000));
+     // 토큰 계정 생성
+     const associatedTokenAccount = await token.getAssociatedTokenAddress(
+       mintKeypair.publicKey,
+       new web3.PublicKey(publicKey)
+     )
 
-          const associatedTokenAccount = await token.getAssociatedTokenAddress(
-            mintKeypair.publicKey,
-            new web3.PublicKey(publicKey)
-          );
+     transaction.add(
+       token.createAssociatedTokenAccountInstruction(
+         new web3.PublicKey(publicKey),
+         associatedTokenAccount,
+         new web3.PublicKey(publicKey),
+         mintKeypair.publicKey
+       )
+     )
 
-          transaction.add(
-            token.createAssociatedTokenAccountInstruction(
-              new web3.PublicKey(publicKey),
-              associatedTokenAccount,
-              new web3.PublicKey(publicKey),
-              mintKeypair.publicKey
-            )
-          );
+     // 토큰 발행
+     transaction.add(
+       token.createMintToInstruction(
+         mintKeypair.publicKey,
+         associatedTokenAccount,
+         new web3.PublicKey(publicKey),
+         Number(supply) * (10 ** decimals),
+         [],
+         token.TOKEN_PROGRAM_ID
+       )
+     )
 
-          transaction.add(
-            token.createMintToInstruction(
-              mintKeypair.publicKey,
-              associatedTokenAccount,
-              new web3.PublicKey(publicKey),
-              Number(supply) * (10 ** decimals),
-              [],
-              token.TOKEN_PROGRAM_ID
-            )
-          );
+     const blockHash = await connection.getLatestBlockhash()
+     transaction.recentBlockhash = blockHash.blockhash
+     transaction.feePayer = new web3.PublicKey(publicKey)
 
-          await new Promise(resolve => setTimeout(resolve, 1000));
+     // 트랜잭션 서명 및 전송
+     const signed = await wallet.signTransaction(transaction)
+     signed.partialSign(mintKeypair)
+     
+     const signature = await connection.sendRawTransaction(signed.serialize())
+     await connection.confirmTransaction(signature)
 
-          const blockHash = await connection.getLatestBlockhash();
-          transaction.recentBlockhash = blockHash.blockhash;
-          transaction.feePayer = new web3.PublicKey(publicKey);
+     console.log('Token created successfully!')
+     
+     // 메타데이터 생성 시도
+     try {
+       const metaplex = Metaplex.make(connection)
+       const metaplexTransaction = await metaplex
+         .tokens()
+         .createToken({
+           name: name,
+           symbol: symbol,
+           initialSupply: Number(supply),
+           mintAddress: mintKeypair.publicKey,
+           decimals: decimals,
+           updateAuthority: new web3.PublicKey(publicKey),
+           owner: new web3.PublicKey(publicKey),
+         })
 
-          const signed = await wallet.signTransaction(transaction);
-          signed.partialSign(mintKeypair);
-          
-          const signature = await connection.sendRawTransaction(signed.serialize());
-          await connection.confirmTransaction(signature);
+       console.log('Metadata created successfully:', metaplexTransaction)
+     } catch (error) {
+       console.warn('Metadata creation failed:', error)
+     }
 
-          console.log('Token created successfully!');
-          
-          // 메타데이터 생성은 선택적으로
-          try {
-            const metaplex = Metaplex.make(connection);
-            await metaplex
-              .tokens()
-              .createToken({
-                name: name,
-                symbol: symbol,
-                initialSupply: Number(supply),
-                mintAddress: mintKeypair.publicKey,
-                decimals: decimals,
-                updateAuthority: new web3.PublicKey(publicKey),
-                owner: new web3.PublicKey(publicKey),
-              });
-          } catch (error) {
-            console.warn('Metadata creation failed:', error);
-          }
+     setNewToken({ name: '', symbol: '', supply: '' })
+     alert(`토큰이 성공적으로 생성되었습니다!\n토큰 주소: ${mintKeypair.publicKey.toString()}\n\n토큰이 지갑에 표시되는데 시간이 걸릴 수 있습니다.`)
 
-          setNewToken({ name: '', symbol: '', supply: '' });
-          alert(`토큰이 성공적으로 생성되었습니다!\n토큰 주소: ${mintKeypair.publicKey.toString()}\n\n토큰이 지갑에 표시되는데 시간이 걸릴 수 있습니다.`);
-          return; // 성공시 함수 종료
-        } catch (error) {
-          if (i === retries - 1) throw error; // 마지막 시도에서 실패하면 에러 던지기
-          console.log(`Retry ${i + 1} of ${retries}`);
-          await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1))); // 재시도 간격 증가
-        }
-      }
-    };
-
-    await retryCreateToken();
-  } catch (error) {
-    console.error('Token creation failed:', error);
-    if ((error as any).message?.includes('429')) {
-      alert('너무 많은 요청이 발생했습니다. 잠시 후 다시 시도해주세요.');
-    } else {
-      alert('토큰 생성에 실패했습니다: ' + (error as Error).message);
-    }
-  } finally {
-    setIsLoading(false);
-  }
-};
+   } catch (error) {
+     console.error('Token creation failed:', error)
+     alert('토큰 생성에 실패했습니다: ' + (error as Error).message)
+   } finally {
+     setIsLoading(false)
+   }
+ }
 
  const infoCards = [
    {
