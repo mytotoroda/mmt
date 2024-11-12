@@ -48,7 +48,7 @@ export default function MemeCoinsPage() {
 
 useEffect(() => {
   const alchemyUrl = network === 'mainnet-beta'
-    ? process.env.NEXT_PUBLIC_MAINNET_RPC_URL2
+    ? process.env.NEXT_PUBLIC_MAINNET_RPC_URL
     : "https://api.devnet.solana.com";  // devnet은 기본 URL 사용
     
   const conn = new web3.Connection(alchemyUrl, {
