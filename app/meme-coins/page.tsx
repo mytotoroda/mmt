@@ -58,21 +58,22 @@ export default function MemeCoinsPage() {
   })
 
   useEffect(() => {
-    // RPC URL 설정 및 백업 URL 준비
+    // RPC URL 설정
     const rpcUrl = network === 'mainnet-beta' 
-	  ? process.env.NEXT_PUBLIC_MAINNET_RPC_URL
-	  : "https://api.devnet.solana.com";
+      ? process.env.NEXT_PUBLIC_MAINNET_RPC_URL
+      : "https://api.devnet.solana.com";
 
-    // 첫 번째 RPC URL로 연결 설정
-    const conn = new web3.Connection(rpcUrls[0]!, {
+    // Connection 설정
+    const conn = new web3.Connection(rpcUrl!, {
       commitment: 'confirmed',
       confirmTransactionInitialTimeout: 60000, // 60초로 증가
       wsEndpoint: network === 'mainnet-beta' 
-        ? rpcUrls[0]?.replace('https', 'wss')
+        ? rpcUrl?.replace('https', 'wss')
         : undefined
     });
+    
     setConnection(conn);
-  }, [network]);
+}, [network]);
 
   const waitForTransactionConfirmation = async (
     signature: string,
