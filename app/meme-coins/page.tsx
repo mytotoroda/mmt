@@ -4,6 +4,14 @@ import { Wallet, Coins, CircleDollarSign, Tag, LayoutGrid } from 'lucide-react'
 import * as web3 from '@solana/web3.js'
 import * as token from '@solana/spl-token'
 import { useWallet } from '../../contexts/WalletContext'
+import dynamic from 'next/dynamic'
+
+const mplTokenMetadata = dynamic(() => import('@metaplex-foundation/mpl-token-metadata'), {
+  ssr: false
+})
+const createUmi = dynamic(() => import('@metaplex-foundation/umi-bundle-defaults'), {
+  ssr: false
+})
 
 interface WalletContextType {
   publicKey: string | null;
