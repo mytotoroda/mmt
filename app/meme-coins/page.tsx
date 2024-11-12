@@ -4,7 +4,6 @@ import { Wallet, Coins, CircleDollarSign, Tag, LayoutGrid } from 'lucide-react'
 import * as web3 from '@solana/web3.js'
 import * as token from '@solana/spl-token'
 import { useWallet } from '../../contexts/WalletContext'
-import { Metaplex } from '@metaplex-foundation/js'
 
 interface WalletContextType {
  publicKey: string | null;
@@ -49,12 +48,11 @@ export default function MemeCoinsPage() {
 
 useEffect(() => {
   const alchemyUrl = network === 'mainnet-beta'
-    ? process.env.NEXT_PUBLIC_MAINNET_RPC_URL
+    ? process.env.NEXT_PUBLIC_MAINNET_RPC_URL2
     : "https://api.devnet.solana.com";  // devnet은 기본 URL 사용
     
   const conn = new web3.Connection(alchemyUrl, {
     commitment: 'confirmed',
-    // Rate limit 방지를 위한 설정 추가
     httpHeaders: {
       'Cache-Control': 'no-cache',
       'Pragma': 'no-cache',
@@ -63,8 +61,6 @@ useEffect(() => {
   });
   setConnection(conn);
 }, [network]);
-
-
 
  const createToken = async (name: string, symbol: string, supply: string): Promise<void> => {
    setIsLoading(true);
@@ -149,26 +145,6 @@ useEffect(() => {
 
      console.log('Token created successfully!')
      
-     // 메타데이터 생성 시도
-     try {
-       const metaplex = Metaplex.make(connection)
-       const metaplexTransaction = await metaplex
-         .tokens()
-         .createToken({
-           name: name,
-           symbol: symbol,
-           initialSupply: Number(supply),
-           mintAddress: mintKeypair.publicKey,
-           decimals: decimals,
-           updateAuthority: new web3.PublicKey(publicKey),
-           owner: new web3.PublicKey(publicKey),
-         })
-
-       console.log('Metadata created successfully:', metaplexTransaction)
-     } catch (error) {
-       console.warn('Metadata creation failed:', error)
-     }
-
      setNewToken({ name: '', symbol: '', supply: '' })
      alert(`토큰이 성공적으로 생성되었습니다!\n토큰 주소: ${mintKeypair.publicKey.toString()}\n\n토큰이 지갑에 표시되는데 시간이 걸릴 수 있습니다.`)
 

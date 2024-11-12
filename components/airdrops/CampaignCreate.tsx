@@ -81,19 +81,23 @@ export default function CampaignCreate({
     }));
   };
 
-  return (
-    <Card sx={{ maxWidth: 800, margin: 'auto', mt: 2 }}>
+   return (
+    <Card className="max-w-4xl mx-auto mt-4 bg-white dark:bg-gray-800 shadow-md">
       <CardHeader
         title={
-          <Typography variant="h5" component="h2">
+          <Typography 
+            variant="h5" 
+            component="h2"
+            className="text-gray-900 dark:text-gray-100"
+          >
             Create New Airdrop Campaign
           </Typography>
         }
+        className="border-b border-gray-200 dark:border-gray-700"
       />
       <CardContent>
         <Box component="form" onSubmit={handleSubmit} noValidate>
           <Grid container spacing={3}>
-            {/* Campaign Title */}
             <Grid item xs={12}>
               <TextField
                 fullWidth
@@ -103,10 +107,16 @@ export default function CampaignCreate({
                 required
                 variant="outlined"
                 placeholder="Enter campaign title"
+                className="bg-white dark:bg-gray-900"
+                InputLabelProps={{
+                  className: "text-gray-600 dark:text-gray-300"
+                }}
+                InputProps={{
+                  className: "text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600"
+                }}
               />
             </Grid>
 
-            {/* Token Address */}
             <Grid item xs={12}>
               <TextField
                 fullWidth
@@ -116,10 +126,16 @@ export default function CampaignCreate({
                 required
                 variant="outlined"
                 placeholder="Enter token contract address"
+                className="bg-white dark:bg-gray-900"
+                InputLabelProps={{
+                  className: "text-gray-600 dark:text-gray-300"
+                }}
+                InputProps={{
+                  className: "text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600"
+                }}
               />
             </Grid>
 
-            {/* Token Name and Symbol */}
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
@@ -129,8 +145,16 @@ export default function CampaignCreate({
                 required
                 variant="outlined"
                 placeholder="e.g. Solana"
+                className="bg-white dark:bg-gray-900"
+                InputLabelProps={{
+                  className: "text-gray-600 dark:text-gray-300"
+                }}
+                InputProps={{
+                  className: "text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600"
+                }}
               />
             </Grid>
+            
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
@@ -140,10 +164,16 @@ export default function CampaignCreate({
                 required
                 variant="outlined"
                 placeholder="e.g. SOL"
+                className="bg-white dark:bg-gray-900"
+                InputLabelProps={{
+                  className: "text-gray-600 dark:text-gray-300"
+                }}
+                InputProps={{
+                  className: "text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600"
+                }}
               />
             </Grid>
 
-            {/* Amount and Recipients */}
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
@@ -154,8 +184,16 @@ export default function CampaignCreate({
                 required
                 variant="outlined"
                 placeholder="Enter amount"
+                className="bg-white dark:bg-gray-900"
+                InputLabelProps={{
+                  className: "text-gray-600 dark:text-gray-300"
+                }}
+                InputProps={{
+                  className: "text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600"
+                }}
               />
             </Grid>
+
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
@@ -167,26 +205,34 @@ export default function CampaignCreate({
                 variant="outlined"
                 inputProps={{ min: 0 }}
                 placeholder="Enter number of recipients"
+                className="bg-white dark:bg-gray-900"
+                InputLabelProps={{
+                  className: "text-gray-600 dark:text-gray-300"
+                }}
+                InputProps={{
+                  className: "text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600"
+                }}
               />
             </Grid>
 
-            {/* Error Alert */}
             {error && (
               <Grid item xs={12}>
-                <Alert severity="error">
+                <Alert 
+                  severity="error"
+                  className="bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200"
+                >
                   {error}
                 </Alert>
               </Grid>
             )}
 
-            {/* Submit Button */}
             <Grid item xs={12}>
               <Button
                 type="submit"
                 variant="contained"
                 fullWidth
                 disabled={loading}
-                sx={{ mt: 2 }}
+                className="mt-4 bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600 text-white disabled:bg-gray-400 dark:disabled:bg-gray-600"
               >
                 {loading ? 'Creating...' : 'Create Campaign'}
               </Button>

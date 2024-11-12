@@ -138,14 +138,17 @@ export default function CampaignEdit({
   // 진행률 계산
   const progressPercentage = (formData.completed_recipients / formData.total_recipients) * 100;
 
-  return (
-    <Card sx={{ maxWidth: 800, margin: 'auto', mt: 2 }}>
+   return (
+    <Card 
+      className="max-w-4xl mx-auto mt-4 bg-white dark:bg-gray-800 shadow-md"
+    >
       <CardHeader
         title={
-          <Typography variant="h5" component="h2">
+          <Typography variant="h5" component="h2" className="text-gray-900 dark:text-gray-100">
             Edit Airdrop Campaign
           </Typography>
         }
+        className="border-b border-gray-200 dark:border-gray-700"
       />
       <CardContent>
         <Box component="form" onSubmit={handleSubmit} noValidate>
@@ -160,6 +163,13 @@ export default function CampaignEdit({
                 variant="outlined"
                 placeholder="Enter campaign title"
                 error={error.includes('title')}
+                className="bg-white dark:bg-gray-900"
+                InputLabelProps={{
+                  className: "text-gray-600 dark:text-gray-300"
+                }}
+                InputProps={{
+                  className: "text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600"
+                }}
               />
             </Grid>
 
@@ -173,6 +183,13 @@ export default function CampaignEdit({
                 variant="outlined"
                 placeholder="Enter token contract address"
                 error={error.includes('address')}
+                className="bg-white dark:bg-gray-900"
+                InputLabelProps={{
+                  className: "text-gray-600 dark:text-gray-300"
+                }}
+                InputProps={{
+                  className: "text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600"
+                }}
               />
             </Grid>
 
@@ -186,8 +203,16 @@ export default function CampaignEdit({
                 variant="outlined"
                 placeholder="e.g. Solana"
                 error={error.includes('name')}
+                className="bg-white dark:bg-gray-900"
+                InputLabelProps={{
+                  className: "text-gray-600 dark:text-gray-300"
+                }}
+                InputProps={{
+                  className: "text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600"
+                }}
               />
             </Grid>
+
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
@@ -198,6 +223,13 @@ export default function CampaignEdit({
                 variant="outlined"
                 placeholder="e.g. SOL"
                 error={error.includes('symbol')}
+                className="bg-white dark:bg-gray-900"
+                InputLabelProps={{
+                  className: "text-gray-600 dark:text-gray-300"
+                }}
+                InputProps={{
+                  className: "text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600"
+                }}
               />
             </Grid>
 
@@ -212,8 +244,16 @@ export default function CampaignEdit({
                 variant="outlined"
                 placeholder="Enter amount"
                 error={error.includes('amount')}
+                className="bg-white dark:bg-gray-900"
+                InputLabelProps={{
+                  className: "text-gray-600 dark:text-gray-300"
+                }}
+                InputProps={{
+                  className: "text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600"
+                }}
               />
             </Grid>
+
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
@@ -226,6 +266,13 @@ export default function CampaignEdit({
                 inputProps={{ min: 0 }}
                 placeholder="Enter number of recipients"
                 error={error.includes('recipients')}
+                className="bg-white dark:bg-gray-900"
+                InputLabelProps={{
+                  className: "text-gray-600 dark:text-gray-300"
+                }}
+                InputProps={{
+                  className: "text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600"
+                }}
               />
             </Grid>
 
@@ -246,24 +293,44 @@ export default function CampaignEdit({
                   error={formData.completed_recipients > formData.total_recipients}
                   helperText={formData.completed_recipients > formData.total_recipients ? 
                     "Cannot exceed total recipients" : ""}
+                  className="bg-white dark:bg-gray-900"
+                  InputLabelProps={{
+                    className: "text-gray-600 dark:text-gray-300"
+                  }}
+                  InputProps={{
+                    className: "text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600"
+                  }}
+                  FormHelperTextProps={{
+                    className: "text-red-500 dark:text-red-400"
+                  }}
                 />
                 <Tooltip title="현재까지 에어드랍이 완료된 수신자 수">
-                  <InfoIcon color="action" />
+                  <InfoIcon className="text-gray-500 dark:text-gray-400" />
                 </Tooltip>
               </Stack>
             </Grid>
 
             <Grid item xs={12} sm={6}>
               <FormControl fullWidth>
-                <InputLabel id="status-label">Status</InputLabel>
+                <InputLabel 
+                  id="status-label"
+                  className="text-gray-600 dark:text-gray-300"
+                >
+                  Status
+                </InputLabel>
                 <Select
                   labelId="status-label"
                   value={formData.status}
                   label="Status"
                   onChange={handleChange('status')}
+                  className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 border-gray-300 dark:border-gray-600"
                 >
                   {STATUS_OPTIONS.map((option) => (
-                    <MenuItem key={option.value} value={option.value}>
+                    <MenuItem 
+                      key={option.value} 
+                      value={option.value}
+                      className="hover:bg-gray-100 dark:hover:bg-gray-700"
+                    >
                       {option.label}
                     </MenuItem>
                   ))}
@@ -274,24 +341,28 @@ export default function CampaignEdit({
             <Grid item xs={12}>
               <Box sx={{ mt: 2 }}>
                 <Box display="flex" justifyContent="space-between" mb={1}>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" className="text-gray-600 dark:text-gray-300">
                     진행률
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" className="text-gray-600 dark:text-gray-300">
                     {Math.round(progressPercentage)}%
                   </Typography>
                 </Box>
                 <LinearProgress 
                   variant="determinate" 
                   value={progressPercentage}
-                  sx={{ height: 8, borderRadius: 1 }}
+                  className="h-2 rounded bg-gray-200 dark:bg-gray-700"
                 />
               </Box>
             </Grid>
 
             {error && showError && (
               <Grid item xs={12}>
-                <Alert severity="error" onClose={handleCloseError}>
+                <Alert 
+                  severity="error" 
+                  onClose={handleCloseError}
+                  className="bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200"
+                >
                   {error}
                 </Alert>
               </Grid>
@@ -303,7 +374,7 @@ export default function CampaignEdit({
                   type="submit"
                   variant="contained"
                   disabled={loading}
-                  sx={{ flex: 1 }}
+                  className="flex-1 bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600 text-white"
                 >
                   {loading ? 'Updating...' : 'Update Campaign'}
                 </Button>
@@ -311,7 +382,7 @@ export default function CampaignEdit({
                   onClick={onCancel}
                   variant="outlined"
                   disabled={loading}
-                  sx={{ flex: 1 }}
+                  className="flex-1 text-blue-600 dark:text-blue-400 border-blue-600 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20"
                 >
                   Cancel
                 </Button>

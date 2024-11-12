@@ -23,7 +23,9 @@ export default function AirdropsPage() {
     return (
       <div className="container mx-auto px-4 py-8">
         <div className="flex justify-between items-center mb-8">
-          <h1 className="text-2xl font-bold">에어드랍 관리</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6 border-b border-gray-200 dark:border-gray-700 pb-4">
+  에어드랍 관리
+</h1>
           {mode === 'list' && (
             <button
               onClick={() => setMode('create')}
