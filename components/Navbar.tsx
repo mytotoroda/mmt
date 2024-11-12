@@ -43,10 +43,7 @@ const getBalance = async (publicKeyStr: string, network: 'mainnet-beta' | 'devne
   try {
     // GenesysGo나 Quicknode 같은 RPC 제공자의 엔드포인트 사용
     const endpoint = network === 'mainnet-beta'
-      ? 'https://solana-mainnet.g.alchemy.com/v2/HUTjU3xC1roX4v2sPpqtGGFOk2uUVl5r'  // 무료 RPC
-      // 또는 다음 중 하나 사용:
-      // 'https://solana-mainnet.rpc.extrnode.com'
-      // 'https://solana-api.projectserum.com'
+      ? process.env.NEXT_PUBLIC_MAINNET_RPC_URL  // 무료 RPC
       : 'https://api.devnet.solana.com';
     
     const connection = new Connection(endpoint, {
