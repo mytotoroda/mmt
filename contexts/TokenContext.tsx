@@ -4,7 +4,6 @@ import * as web3 from '@solana/web3.js'
 import * as token from '@solana/spl-token'
 import { useWallet } from './WalletContext'
 
-
 // Token Metadata Program ID
 const TOKEN_METADATA_PROGRAM_ID = new web3.PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s')
 
@@ -28,143 +27,166 @@ interface TokenContextType {
 const TokenContext = createContext<TokenContextType | undefined>(undefined)
 
 export function TokenProvider({ children }: { children: ReactNode }) {
-  const { publicKey, wallet } = useWallet()
+  const { publicKey, wallet, network } = useWallet()
   const [tokens, setTokens] = useState<TokenData[]>([])
   const [loading, setLoading] = useState(false)
 
-const fetchMetadataFromExplorer = async (mintAddress: string) => {
-  try {
-    const connection = new web3.Connection('https://api.devnet.solana.com');
-    const [metadataPDA] = web3.PublicKey.findProgramAddressSync(
-      [
-        Buffer.from('metadata'),
-        TOKEN_METADATA_PROGRAM_ID.toBuffer(),
-        new web3.PublicKey(mintAddress).toBuffer()
-      ],
-      TOKEN_METADATA_PROGRAM_ID
-    );
-
-    const metadataAccount = await connection.getAccountInfo(metadataPDA);
-    
-    if (metadataAccount) {
-      const data = metadataAccount.data;
+  // 네트워크에 따른 RPC URL 설정
+  const getRpcUrl = () => {
+    if (network === 'mainnet-beta') {
+      // 메인넷의 경우 환경 변수에서 RPC URL 가져오기
+      const mainnetUrls = [
+        process.env.NEXT_PUBLIC_MAINNET_RPC_URL,
+        process.env.NEXT_PUBLIC_MAINNET_RPC_URL2
+      ].filter(Boolean);
       
-      // Raw 데이터 변환
-      const rawData = Array.from(data);
-      const rawHexData = Array.from(data)
-        .map(b => b.toString(16).padStart(2, '0'))
-        .join(' ');
-      const rawUtf8Data = new TextDecoder().decode(data);
+      // 랜덤하게 하나의 URL 선택 (로드 밸런싱)
+      return mainnetUrls[Math.floor(Math.random() * mainnetUrls.length)] || web3.clusterApiUrl('mainnet-beta');
+    }
+    
+    return web3.clusterApiUrl('devnet');
+  };
 
-      // 메타데이터 구조 분석
-      let name = 'Unknown';
-      let symbol = 'UNKNOWN';
-      let uri = '';
+  // Connection 인스턴스 생성 함수
+  const getConnection = () => {
+    const rpcUrl = getRpcUrl();
+    return new web3.Connection(rpcUrl, {
+      commitment: 'confirmed',
+      confirmTransactionInitialTimeout: 60000,
+      wsEndpoint: network === 'mainnet-beta' 
+        ? rpcUrl.replace('https', 'wss')
+        : undefined
+    });
+  };
 
-      // 1. 먼저 연속된 문자열 청크들을 모두 찾음
-      const textChunks: { start: number; text: string }[] = [];
-      let currentChunk = '';
-      let chunkStart = -1;
+  const fetchMetadataFromExplorer = async (mintAddress: string) => {
+    try {
+      const connection = getConnection();
+      const [metadataPDA] = web3.PublicKey.findProgramAddressSync(
+        [
+          Buffer.from('metadata'),
+          TOKEN_METADATA_PROGRAM_ID.toBuffer(),
+          new web3.PublicKey(mintAddress).toBuffer()
+        ],
+        TOKEN_METADATA_PROGRAM_ID
+      );
 
-      for (let i = 0; i < rawData.length; i++) {
-        const byte = rawData[i];
-        // 출력 가능한 ASCII 문자 범위 (32-126)
-        if (byte >= 32 && byte <= 126) {
-          if (chunkStart === -1) chunkStart = i;
-          currentChunk += String.fromCharCode(byte);
-        } else {
-          if (currentChunk.length >= 3) { // 최소 3글자 이상인 경우만 저장
-            textChunks.push({ start: chunkStart, text: currentChunk });
+      const metadataAccount = await connection.getAccountInfo(metadataPDA);
+      
+      if (metadataAccount) {
+        const data = metadataAccount.data;
+        
+        // Raw 데이터 변환
+        const rawData = Array.from(data);
+        const rawHexData = Array.from(data)
+          .map(b => b.toString(16).padStart(2, '0'))
+          .join(' ');
+        const rawUtf8Data = new TextDecoder().decode(data);
+
+        // 메타데이터 구조 분석
+        let name = 'Unknown';
+        let symbol = 'UNKNOWN';
+        let uri = '';
+
+        // 1. 문자열 청크 찾기
+        const textChunks: { start: number; text: string }[] = [];
+        let currentChunk = '';
+        let chunkStart = -1;
+
+        for (let i = 0; i < rawData.length; i++) {
+          const byte = rawData[i];
+          if (byte >= 32 && byte <= 126) {
+            if (chunkStart === -1) chunkStart = i;
+            currentChunk += String.fromCharCode(byte);
+          } else {
+            if (currentChunk.length >= 3) {
+              textChunks.push({ start: chunkStart, text: currentChunk });
+            }
+            currentChunk = '';
+            chunkStart = -1;
           }
-          currentChunk = '';
-          chunkStart = -1;
         }
+
+        if (currentChunk.length >= 3) {
+          textChunks.push({ start: chunkStart, text: currentChunk });
+        }
+
+        // 2. 청크 분석
+        for (let i = 0; i < textChunks.length; i++) {
+          const chunk = textChunks[i].text;
+          
+          if (chunk.match(/^https?:\/\//)) {
+            uri = chunk;
+            continue;
+          }
+
+          if (name === 'Unknown' && 
+              chunk.match(/^[a-zA-Z\s]+$/) &&
+              chunk.length >= 3 && chunk.length <= 20 &&
+              chunk.trim().length > 0) {
+            name = chunk.trim();
+            continue;
+          }
+          
+          if (name !== 'Unknown' && symbol === 'UNKNOWN' && 
+              chunk.match(/^[A-Z]+$/) &&
+              chunk.length >= 2 && chunk.length <= 10) {
+            symbol = chunk;
+            continue;
+          }
+        }
+
+        console.log('Metadata parsed for', mintAddress, ':', {
+          name,
+          symbol,
+          uri,
+          network,
+          textChunks
+        });
+
+        return {
+          name,
+          symbol,
+          uri,
+          rawData,
+          rawHexData,
+          rawUtf8Data,
+          debugInfo: {
+            textChunks,
+            fullData: rawData,
+            foundName: name,
+            foundSymbol: symbol
+          }
+        };
       }
-
-      // 마지막 청크 처리
-      if (currentChunk.length >= 3) {
-        textChunks.push({ start: chunkStart, text: currentChunk });
-      }
-
-      // 2. 청크들을 분석하여 name, symbol, uri 식별
-      for (let i = 0; i < textChunks.length; i++) {
-        const chunk = textChunks[i].text;
-        
-        // URI 패턴 매칭 (http:// 또는 https:// 로 시작하는 경우)
-        if (chunk.match(/^https?:\/\//)) {
-          uri = chunk;
-          continue;
-        }
-
-        // 이름 후보 식별 (알파벳과 공백만 허용)
-        if (name === 'Unknown' && 
-            chunk.match(/^[a-zA-Z\s]+$/) && // 알파벳과 공백만 허용
-            chunk.length >= 3 && chunk.length <= 20 &&
-            chunk.trim().length > 0) { // 공백으로만 이루어진 경우 제외
-          name = chunk.trim(); // 앞뒤 공백 제거
-          continue;
-        }
-        
-        // 심볼 후보 식별 (대문자 알파벳만 허용)
-        if (name !== 'Unknown' && symbol === 'UNKNOWN' && 
-            chunk.match(/^[A-Z]+$/) &&
-            chunk.length >= 2 && chunk.length <= 10) {
-          symbol = chunk;
-          continue;
-        }
-      }
-
-      console.log('Enhanced metadata parsing for', mintAddress, ':', {
-        name,
-        symbol,
-        uri,
-        textChunks
-      });
 
       return {
-        name,
-        symbol,
-        uri,
-        rawData,
-        rawHexData,
-        rawUtf8Data,
-        debugInfo: {
-          textChunks,
-          fullData: rawData,
-          foundName: name,
-          foundSymbol: symbol
-        }
+        name: 'Unknown',
+        symbol: 'UNKNOWN',
+        uri: '',
+        rawData: [],
+        rawHexData: '',
+        rawUtf8Data: ''
+      };
+    } catch (error) {
+      console.error('메타데이터 조회 실패:', error);
+      return {
+        name: 'Unknown',
+        symbol: 'UNKNOWN',
+        uri: '',
+        rawData: [],
+        rawHexData: '',
+        rawUtf8Data: ''
       };
     }
-
-    return {
-      name: 'Unknown',
-      symbol: 'UNKNOWN',
-      uri: '',
-      rawData: [],
-      rawHexData: '',
-      rawUtf8Data: ''
-    };
-  } catch (error) {
-    console.error('메타데이터 조회 실패:', error);
-    return {
-      name: 'Unknown',
-      symbol: 'UNKNOWN',
-      uri: '',
-      rawData: [],
-      rawHexData: '',
-      rawUtf8Data: ''
-    };
-  }
-};
-
+  };
 
   const fetchTokenAccounts = async () => {
     if (!publicKey) return
 
     setLoading(true)
     try {
-      const connection = new web3.Connection(web3.clusterApiUrl('devnet'))
+      const connection = getConnection();
       
       const tokenAccounts = await connection.getParsedTokenAccountsByOwner(
         new web3.PublicKey(publicKey),
@@ -176,15 +198,29 @@ const fetchMetadataFromExplorer = async (mintAddress: string) => {
       const tokenData: TokenData[] = await Promise.all(
         tokenAccounts.value.map(async (account) => {
           const mintPubkey = new web3.PublicKey(account.account.data.parsed.info.mint)
-          const mintInfo = await token.getMint(connection, mintPubkey)
+          let mintInfo;
+          let retryCount = 0;
+          const maxRetries = 3;
+
+          // 민트 정보 조회 시 재시도 로직
+          while (retryCount < maxRetries) {
+            try {
+              mintInfo = await token.getMint(connection, mintPubkey);
+              break;
+            } catch (error) {
+              retryCount++;
+              if (retryCount === maxRetries) throw error;
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+          }
 
           const metadata = await fetchMetadataFromExplorer(mintPubkey.toString())
           
           return {
             id: account.account.data.parsed.info.mint,
             balance: account.account.data.parsed.info.tokenAmount.uiAmount,
-            decimals: mintInfo.decimals,
-            supply: mintInfo.supply.toString(),
+            decimals: mintInfo!.decimals,
+            supply: mintInfo!.supply.toString(),
             created: new Date().toISOString().split('T')[0],
             name: metadata.name,
             symbol: metadata.symbol,
@@ -193,7 +229,7 @@ const fetchMetadataFromExplorer = async (mintAddress: string) => {
         })
       )
 
-      console.log('Found tokens:', tokenData)
+      console.log('Found tokens on', network, ':', tokenData)
       setTokens(tokenData)
     } catch (error) {
       console.error('토큰 데이터 조회 실패:', error)
@@ -202,12 +238,14 @@ const fetchMetadataFromExplorer = async (mintAddress: string) => {
     }
   }
 
-  // 지갑이 연결되면 토큰 데이터 조회
+  // 지갑이나 네트워크가 변경되면 토큰 데이터 다시 조회
   useEffect(() => {
     if (publicKey) {
       fetchTokenAccounts()
+    } else {
+      setTokens([]) // 지갑 연결이 해제되면 토큰 목록 초기화
     }
-  }, [publicKey])
+  }, [publicKey, network])
 
   const value = {
     tokens,

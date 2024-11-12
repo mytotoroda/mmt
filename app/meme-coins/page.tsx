@@ -6,194 +6,249 @@ import * as token from '@solana/spl-token'
 import { useWallet } from '../../contexts/WalletContext'
 
 interface WalletContextType {
- publicKey: string | null;
- wallet: {
-   signTransaction: (transaction: web3.Transaction) => Promise<web3.Transaction>;
- } | null;
- network: 'mainnet-beta' | 'devnet';
+  publicKey: string | null;
+  wallet: {
+    signTransaction: (transaction: web3.Transaction) => Promise<web3.Transaction>;
+  } | null;
+  network: 'mainnet-beta' | 'devnet';
 }
 
 interface NewTokenData {
- name: string;
- symbol: string;
- supply: string;
+  name: string;
+  symbol: string;
+  supply: string;
 }
 
 interface InfoCardProps {
- icon: React.ReactNode;
- text: string;
- bgColor: string;
+  icon: React.ReactNode;
+  text: string;
+  bgColor: string;
 }
 
 const InfoCard: React.FC<InfoCardProps> = ({ icon, text, bgColor }) => (
- <div className={`${bgColor} dark:bg-gray-700 p-4 rounded-lg`}>
-   <div className="flex items-center space-x-3">
-     {icon}
-     <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-       {text}
-     </span>
-   </div>
- </div>
+  <div className={`${bgColor} dark:bg-gray-700 p-4 rounded-lg`}>
+    <div className="flex items-center space-x-3">
+      {icon}
+      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+        {text}
+      </span>
+    </div>
+  </div>
 );
 
+const RETRY_DELAY = 2000; // 2초
+const MAX_RETRIES = 3;
+
 export default function MemeCoinsPage() {
- const { publicKey, wallet, network } = useWallet() as WalletContextType
- const [connection, setConnection] = useState<web3.Connection | null>(null)
- const [isLoading, setIsLoading] = useState<boolean>(false)
- const [newToken, setNewToken] = useState<NewTokenData>({
-   name: '',
-   symbol: '',
-   supply: ''
- })
+  const { publicKey, wallet, network } = useWallet() as WalletContextType
+  const [connection, setConnection] = useState<web3.Connection | null>(null)
+  const [isLoading, setIsLoading] = useState<boolean>(false)
+  const [newToken, setNewToken] = useState<NewTokenData>({
+    name: '',
+    symbol: '',
+    supply: ''
+  })
 
-useEffect(() => {
-  const alchemyUrl = network === 'mainnet-beta'
-    ? process.env.NEXT_PUBLIC_MAINNET_RPC_URL
-    : "https://api.devnet.solana.com";  // devnet은 기본 URL 사용
-    
-  const conn = new web3.Connection(alchemyUrl, {
-    commitment: 'confirmed',
-    httpHeaders: {
-      'Cache-Control': 'no-cache',
-      'Pragma': 'no-cache',
+  useEffect(() => {
+    // RPC URL 설정 및 백업 URL 준비
+    const rpcUrl = network === 'mainnet-beta' 
+	  ? process.env.NEXT_PUBLIC_MAINNET_RPC_URL
+	  : "https://api.devnet.solana.com";
+
+    // 첫 번째 RPC URL로 연결 설정
+    const conn = new web3.Connection(rpcUrls[0]!, {
+      commitment: 'confirmed',
+      confirmTransactionInitialTimeout: 60000, // 60초로 증가
+      wsEndpoint: network === 'mainnet-beta' 
+        ? rpcUrls[0]?.replace('https', 'wss')
+        : undefined
+    });
+    setConnection(conn);
+  }, [network]);
+
+  const waitForTransactionConfirmation = async (
+    signature: string,
+    maxRetries: number = MAX_RETRIES
+  ): Promise<boolean> => {
+    if (!connection) return false;
+
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        const status = await connection.getSignatureStatus(signature);
+        
+        if (status.value?.confirmationStatus === 'confirmed' ||
+            status.value?.confirmationStatus === 'finalized') {
+          return true;
+        }
+
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      } catch (error) {
+        console.error(`Confirmation attempt ${attempt + 1} failed:`, error);
+        if (attempt === maxRetries - 1) throw error;
+      }
+    }
+    return false;
+  };
+
+  const createToken = async (name: string, symbol: string, supply: string): Promise<void> => {
+    setIsLoading(true);
+    let currentAttempt = 0;
+    const maxAttempts = 3;
+
+    while (currentAttempt < maxAttempts) {
+      try {
+        if (!connection || !wallet || !publicKey) {
+          throw new Error('Initialization check failed');
+        }
+
+        // 메인넷 경고
+        if (network === 'mainnet-beta') {
+          const confirm = window.confirm(
+            '메인넷에서 토큰을 생성하시겠습니까? 실제 SOL이 사용됩니다.'
+          );
+          if (!confirm) {
+            setIsLoading(false);
+            return;
+          }
+        }
+
+        // 민트 계정 생성
+        const mintKeypair = web3.Keypair.generate()
+        const decimals = 9
+
+        // 필요한 lamports 계산
+        const lamports = await token.getMinimumBalanceForRentExemptMint(connection)
+
+        // 최신 블록해시 가져오기 (각 시도마다 새로운 블록해시)
+        const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash('confirmed');
+
+        // 토큰 생성 트랜잭션
+        const transaction = new web3.Transaction().add(
+          web3.SystemProgram.createAccount({
+            fromPubkey: new web3.PublicKey(publicKey),
+            newAccountPubkey: mintKeypair.publicKey,
+            space: token.MINT_SIZE,
+            lamports: lamports,
+            programId: token.TOKEN_PROGRAM_ID,
+          }),
+          token.createInitializeMintInstruction(
+            mintKeypair.publicKey,
+            decimals,
+            new web3.PublicKey(publicKey),
+            new web3.PublicKey(publicKey),
+            token.TOKEN_PROGRAM_ID
+          )
+        )
+
+        // 토큰 계정 생성
+        const associatedTokenAccount = await token.getAssociatedTokenAddress(
+          mintKeypair.publicKey,
+          new web3.PublicKey(publicKey)
+        )
+
+        transaction.add(
+          token.createAssociatedTokenAccountInstruction(
+            new web3.PublicKey(publicKey),
+            associatedTokenAccount,
+            new web3.PublicKey(publicKey),
+            mintKeypair.publicKey
+          )
+        )
+
+        // 토큰 발행
+        transaction.add(
+          token.createMintToInstruction(
+            mintKeypair.publicKey,
+            associatedTokenAccount,
+            new web3.PublicKey(publicKey),
+            Number(supply) * (10 ** decimals),
+            [],
+            token.TOKEN_PROGRAM_ID
+          )
+        )
+
+        // 트랜잭션 설정 업데이트
+        transaction.recentBlockhash = blockhash;
+        transaction.lastValidBlockHeight = lastValidBlockHeight;
+        transaction.feePayer = new web3.PublicKey(publicKey)
+
+        // 트랜잭션 서명
+        const signed = await wallet.signTransaction(transaction)
+        signed.partialSign(mintKeypair)
+        
+        // 트랜잭션 전송
+        const signature = await connection.sendRawTransaction(signed.serialize(), {
+          skipPreflight: false,
+          preflightCommitment: 'confirmed',
+          maxRetries: 5
+        });
+
+        // 트랜잭션 확인 대기
+        const confirmed = await waitForTransactionConfirmation(signature);
+        
+        if (confirmed) {
+          console.log('Token created successfully!')
+          setNewToken({ name: '', symbol: '', supply: '' })
+          alert(`토큰이 성공적으로 생성되었습니다!\n토큰 주소: ${mintKeypair.publicKey.toString()}\n\n토큰이 지갑에 표시되는데 시간이 걸릴 수 있습니다.`)
+          break; // 성공하면 루프 종료
+        } else {
+          throw new Error('Transaction confirmation timeout');
+        }
+
+      } catch (error) {
+        console.error(`Attempt ${currentAttempt + 1} failed:`, error)
+        currentAttempt++;
+        
+        if (currentAttempt === maxAttempts) {
+          alert('토큰 생성에 실패했습니다. 네트워크 상태를 확인하고 다시 시도해주세요.');
+          break;
+        }
+        
+        // 다음 시도 전 대기
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+
+    setIsLoading(false);
+  }
+  const infoCards = [
+    {
+      icon: <CircleDollarSign className="h-6 w-6 text-blue-500" />,
+      text: network === 'mainnet-beta' ? "Solana Mainnet" : "Solana Devnet",
+      bgColor: network === 'mainnet-beta' ? "bg-green-50" : "bg-blue-50"
     },
-    wsEndpoint: undefined,
-  });
-  setConnection(conn);
-}, [network]);
+    {
+      icon: <Tag className="h-6 w-6 text-purple-500" />,
+      text: "SPL Token",
+      bgColor: "bg-purple-50"
+    },
+    {
+      icon: <LayoutGrid className="h-6 w-6 text-green-500" />,
+      text: "Custom Mint",
+      bgColor: "bg-green-50"
+    }
+  ];
 
- const createToken = async (name: string, symbol: string, supply: string): Promise<void> => {
-   setIsLoading(true);
-   try {
-     if (!connection || !wallet || !publicKey) {
-       throw new Error('Initialization check failed');
-     }
-
-     // 메인넷 경고
-     if (network === 'mainnet-beta') {
-       const confirm = window.confirm(
-         '메인넷에서 토큰을 생성하시겠습니까? 실제 SOL이 사용됩니다.'
-       );
-       if (!confirm) {
-         setIsLoading(false);
-         return;
-       }
-     }
-
-     // 민트 계정 생성
-     const mintKeypair = web3.Keypair.generate()
-     const decimals = 9
-
-     // 필요한 lamports 계산
-     const lamports = await token.getMinimumBalanceForRentExemptMint(connection)
-
-     // 토큰 생성 트랜잭션
-     const transaction = new web3.Transaction().add(
-       web3.SystemProgram.createAccount({
-         fromPubkey: new web3.PublicKey(publicKey),
-         newAccountPubkey: mintKeypair.publicKey,
-         space: token.MINT_SIZE,
-         lamports: lamports,
-         programId: token.TOKEN_PROGRAM_ID,
-       }),
-       token.createInitializeMintInstruction(
-         mintKeypair.publicKey,
-         decimals,
-         new web3.PublicKey(publicKey),
-         new web3.PublicKey(publicKey),
-         token.TOKEN_PROGRAM_ID
-       )
-     )
-
-     // 토큰 계정 생성
-     const associatedTokenAccount = await token.getAssociatedTokenAddress(
-       mintKeypair.publicKey,
-       new web3.PublicKey(publicKey)
-     )
-
-     transaction.add(
-       token.createAssociatedTokenAccountInstruction(
-         new web3.PublicKey(publicKey),
-         associatedTokenAccount,
-         new web3.PublicKey(publicKey),
-         mintKeypair.publicKey
-       )
-     )
-
-     // 토큰 발행
-     transaction.add(
-       token.createMintToInstruction(
-         mintKeypair.publicKey,
-         associatedTokenAccount,
-         new web3.PublicKey(publicKey),
-         Number(supply) * (10 ** decimals),
-         [],
-         token.TOKEN_PROGRAM_ID
-       )
-     )
-
-     const blockHash = await connection.getLatestBlockhash()
-     transaction.recentBlockhash = blockHash.blockhash
-     transaction.feePayer = new web3.PublicKey(publicKey)
-
-     // 트랜잭션 서명 및 전송
-     const signed = await wallet.signTransaction(transaction)
-     signed.partialSign(mintKeypair)
-     
-     const signature = await connection.sendRawTransaction(signed.serialize())
-     await connection.confirmTransaction(signature)
-
-     console.log('Token created successfully!')
-     
-     setNewToken({ name: '', symbol: '', supply: '' })
-     alert(`토큰이 성공적으로 생성되었습니다!\n토큰 주소: ${mintKeypair.publicKey.toString()}\n\n토큰이 지갑에 표시되는데 시간이 걸릴 수 있습니다.`)
-
-   } catch (error) {
-     console.error('Token creation failed:', error)
-     alert('토큰 생성에 실패했습니다: ' + (error as Error).message)
-   } finally {
-     setIsLoading(false)
-   }
- }
-
- const infoCards = [
-   {
-     icon: <CircleDollarSign className="h-6 w-6 text-blue-500" />,
-     text: network === 'mainnet-beta' ? "Solana Mainnet" : "Solana Devnet",
-     bgColor: network === 'mainnet-beta' ? "bg-green-50" : "bg-blue-50"
-   },
-   {
-     icon: <Tag className="h-6 w-6 text-purple-500" />,
-     text: "SPL Token",
-     bgColor: "bg-purple-50"
-   },
-   {
-     icon: <LayoutGrid className="h-6 w-6 text-green-500" />,
-     text: "Custom Mint",
-     bgColor: "bg-green-50"
-   }
- ];
-
- const networkInfo = network === 'mainnet-beta' 
-   ? {
-       warning: "⚠️ 메인넷에서는 실제 SOL이 사용됩니다!",
-       items: [
-         "• 토큰 생성에는 실제 SOL이 필요합니다",
-         "• 생성된 토큰은 Solana 메인넷에서 사용 가능합니다",
-         "• 토큰 이름과 심볼은 변경할 수 없으니 신중히 선택해주세요",
-         "• 초기 발행량은 추후 수정할 수 없습니다",
-         "• 메인넷 토큰은 실제 거래소에 상장할 수 있습니다"
-       ]
-     }
-   : {
-       warning: "이것은 테스트넷입니다",
-       items: [
-         "• 토큰 생성에는 테스트 SOL이 필요합니다",
-         "• 생성된 토큰은 Solana Devnet에서만 사용 가능합니다",
-         "• 토큰 이름과 심볼은 변경할 수 없으니 신중히 선택해주세요",
-         "• 초기 발행량은 추후 수정할 수 없습니다"
-       ]
-     };
+  const networkInfo = network === 'mainnet-beta' 
+    ? {
+        warning: "⚠️ 메인넷에서는 실제 SOL이 사용됩니다!",
+        items: [
+          "• 토큰 생성에는 실제 SOL이 필요합니다",
+          "• 생성된 토큰은 Solana 메인넷에서 사용 가능합니다",
+          "• 토큰 이름과 심볼은 변경할 수 없으니 신중히 선택해주세요",
+          "• 초기 발행량은 추후 수정할 수 없습니다",
+          "• 메인넷 토큰은 실제 거래소에 상장할 수 있습니다"
+        ]
+      }
+    : {
+        warning: "이것은 테스트넷입니다",
+        items: [
+          "• 토큰 생성에는 테스트 SOL이 필요합니다",
+          "• 생성된 토큰은 Solana Devnet에서만 사용 가능합니다",
+          "• 토큰 이름과 심볼은 변경할 수 없으니 신중히 선택해주세요",
+          "• 초기 발행량은 추후 수정할 수 없습니다"
+        ]
+      };
 
  return (
    <div className="container mx-auto px-4 py-8 max-w-3xl">

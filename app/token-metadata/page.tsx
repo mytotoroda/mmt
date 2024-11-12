@@ -26,6 +26,14 @@ import { WalletContextState } from '@solana/wallet-adapter-react'
 
 const TOKEN_METADATA_PROGRAM_ID = new web3.PublicKey('metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s')
 
+interface WalletContextType {
+  publicKey: string | null;
+  wallet: {
+    signTransaction: (transaction: web3.Transaction) => Promise<web3.Transaction>;
+  } | null;
+  network: 'mainnet-beta' | 'devnet';  // network 타입 추가
+}
+
 interface TokenData {
   address: string
   name: string
@@ -35,7 +43,8 @@ interface TokenData {
 }
 
 export default function TokenMetadataPage() {
-  const { publicKey: walletPublicKey, wallet } = useWallet()
+  // useWallet 호출 부분을 수정
+  const { publicKey: walletPublicKey, wallet, network } = useWallet()  // network를 추가
   const { tokens, refreshTokens } = useTokens()
   const [isLoading, setIsLoading] = useState<boolean>(false)
   const [tokenData, setTokenData] = useState<TokenData>({
@@ -110,8 +119,11 @@ export default function TokenMetadataPage() {
       if (!walletPublicKey || !wallet) {
         throw new Error('지갑이 연결되어 있지 않습니다.')
       }
+      const rpcUrl = network === 'mainnet-beta' 
+  ? process.env.NEXT_PUBLIC_MAINNET_RPC_URL
+  : "https://api.devnet.solana.com";
 
-      const umi = createUmi('https://api.devnet.solana.com/').use(mplTokenMetadata())
+      const umi = createUmi(rpcUrl).use(mplTokenMetadata())
       umi.use(walletAdapterIdentity(wallet as WalletContextState))
 
       const mintPublicKey = fromWeb3JsPublicKey(new web3.PublicKey(tokenData.address))
