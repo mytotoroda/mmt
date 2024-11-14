@@ -195,7 +195,7 @@ return (
           href="/lp" 
           className="text-gray-700 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 text-sm font-medium"
         >
-          유동성공급
+          마켓메이킹
         </Link>
         <Link 
           href="/make-wallet" 

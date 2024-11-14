@@ -1,178 +1,149 @@
-import { useState } from 'react';
-import {
-  Box,
-  Button,
-  Typography,
-  CircularProgress,
-  Alert,
-  AlertTitle,
-  Paper,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
-  Divider
-} from '@mui/material';
-import {
-  CheckCircle as CheckCircleIcon,
-  Error as ErrorIcon,
-  PendingActions as PendingIcon
-} from '@mui/icons-material';
+// components/airdrop-detail/AirdropExecution.tsx
+'use client';
 
-interface AirdropExecutionProps {
-  campaignId: string;
+import { useState, useEffect } from 'react';
+import { CircularProgress, Alert, AlertTitle } from '@mui/material';
+
+interface AirdropStatus {
+  total_wallets: number;
+  completed_count: number;
+  pending_count: number;
+  total_amount: string;
+  status: string;
 }
 
-export default function AirdropExecution({ campaignId }: AirdropExecutionProps) {
+export default function AirdropExecution({ campaignId }: { campaignId: string }) {
+  const [status, setStatus] = useState<AirdropStatus | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
-  const [status, setStatus] = useState<'idle' | 'processing' | 'completed' | 'error'>('idle');
-  const [progress, setProgress] = useState<{
-    total: number;
-    completed: number;
-    failed: number;
-  }>({ total: 0, completed: 0, failed: 0 });
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout;
+
+    const fetchStatus = async () => {
+      try {
+        const response = await fetch(`/api/airdrop/status/${campaignId}`);
+        const data = await response.json();
+        setStatus(data);
+      } catch (error) {
+        console.error('Status fetch error:', error);
+      }
+    };
+
+    fetchStatus();
+    if (isExecuting) {
+      intervalId = setInterval(fetchStatus, 5000);
+    }
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
+  }, [campaignId, isExecuting]);
 
   const executeAirdrop = async () => {
     try {
       setIsExecuting(true);
-      setStatus('processing');
-      const response = await fetch(`/api/airdrop/${campaignId}/execute`, {
-        method: 'POST',
+      setError(null);
+
+      const response = await fetch(`/api/airdrop/execute/${campaignId}`, {
+        method: 'POST'
       });
-      
-      const data = await response.json();
-      
-      if (response.ok) {
-        setStatus('completed');
-        setProgress(data.progress);
-      } else {
-        throw new Error(data.message);
+
+      if (!response.ok) {
+        throw new Error('에어드랍 실행 중 오류가 발생했습니다.');
       }
+
     } catch (error) {
-      console.error('Airdrop execution failed:', error);
-      setStatus('error');
-    } finally {
-      setIsExecuting(false);
+      setError(error instanceof Error ? error.message : '알 수 없는 오류가 발생했습니다.');
     }
   };
 
+  if (!status) return <div>Loading...</div>;
+
   return (
-    <Box>
-      <Paper 
-        variant="outlined" 
-        className="p-6 mb-6 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
-      >
-        <Typography 
-          variant="h6" 
-          gutterBottom
-          className="text-gray-900 dark:text-gray-100 font-semibold"
-        >
+    <div className="max-w-2xl mx-auto p-6 bg-white dark:bg-gray-800 rounded-lg shadow-lg">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
           에어드랍 실행
-        </Typography>
-        
-        <Typography 
-          variant="body2" 
-          className="text-gray-600 dark:text-gray-400 mb-4"
-          paragraph
-        >
-          등록된 주소로 토큰을 전송합니다. 실행 후에는 취소할 수 없습니다.
-        </Typography>
+        </h1>
+      </div>
 
-        <Button
-          variant="contained"
-          color="primary"
-          disabled={isExecuting}
-          onClick={executeAirdrop}
-          className="mt-4 bg-blue-600 dark:bg-blue-500 hover:bg-blue-700 dark:hover:bg-blue-600 disabled:bg-gray-400 dark:disabled:bg-gray-600"
-        >
-          {isExecuting ? (
-            <>
-              <CircularProgress 
-                size={24} 
-                className="mr-2 text-white"
-              />
-              실행 중...
-            </>
-          ) : (
-            '에어드랍 실행'
-          )}
-        </Button>
-      </Paper>
+      <div className="grid grid-cols-2 gap-4 mb-6">
+        <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+          <h3 className="font-semibold text-gray-700 dark:text-gray-300">
+            총 지갑 수
+          </h3>
+          <p className="text-2xl text-gray-900 dark:text-white">
+            {status.total_wallets}
+          </p>
+        </div>
+        <div className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+          <h3 className="font-semibold text-gray-700 dark:text-gray-300">
+            총 에어드랍 수량
+          </h3>
+          <p className="text-2xl text-gray-900 dark:text-white">
+            {Number(status.total_amount).toLocaleString()}
+          </p>
+        </div>
+      </div>
 
-      {status !== 'idle' && (
-        <Paper 
-          variant="outlined" 
-          className="p-6 bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700"
-        >
-          <Typography 
-            variant="h6" 
-            gutterBottom
-            className="text-gray-900 dark:text-gray-100 font-semibold"
-          >
-            실행 현황
-          </Typography>
+      <div className="mb-6">
+        <div className="flex justify-between text-sm text-gray-600 dark:text-gray-400 mb-2">
+          <span>진행률</span>
+          <span>
+            {Math.round((status.completed_count / status.total_wallets) * 100)}%
+          </span>
+        </div>
+        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5">
+          <div
+            className="bg-blue-600 h-2.5 rounded-full"
+            style={{
+              width: `${(status.completed_count / status.total_wallets) * 100}%`
+            }}
+          ></div>
+        </div>
+      </div>
 
-          <List>
-            <ListItem>
-              <ListItemIcon>
-                <PendingIcon className="text-blue-500 dark:text-blue-400" />
-              </ListItemIcon>
-              <ListItemText 
-                primary={
-                  <span className="text-gray-900 dark:text-gray-100">총 처리 대상</span>
-                }
-                secondary={
-                  <span className="text-gray-600 dark:text-gray-400">{progress.total}개</span>
-                }
-              />
-            </ListItem>
+      <div className="grid grid-cols-2 gap-4 text-center mb-6">
+        <div>
+          <h4 className="text-sm text-gray-500 dark:text-gray-400">완료</h4>
+          <p className="text-xl text-green-600 dark:text-green-400">
+            {status.completed_count}
+          </p>
+        </div>
+        <div>
+          <h4 className="text-sm text-gray-500 dark:text-gray-400">대기/실패</h4>
+          <p className="text-xl text-amber-600 dark:text-amber-400">
+            {status.pending_count}
+          </p>
+        </div>
+      </div>
 
-            <Divider className="border-gray-200 dark:border-gray-700" />
-
-            <ListItem>
-              <ListItemIcon>
-                <CheckCircleIcon className="text-green-500 dark:text-green-400" />
-              </ListItemIcon>
-              <ListItemText 
-                primary={
-                  <span className="text-gray-900 dark:text-gray-100">성공</span>
-                }
-                secondary={
-                  <span className="text-gray-600 dark:text-gray-400">{progress.completed}개</span>
-                }
-              />
-            </ListItem>
-
-            <Divider className="border-gray-200 dark:border-gray-700" />
-
-            <ListItem>
-              <ListItemIcon>
-                <ErrorIcon className="text-red-500 dark:text-red-400" />
-              </ListItemIcon>
-              <ListItemText 
-                primary={
-                  <span className="text-gray-900 dark:text-gray-100">실패</span>
-                }
-                secondary={
-                  <span className="text-gray-600 dark:text-gray-400">{progress.failed}개</span>
-                }
-              />
-            </ListItem>
-          </List>
-
-          {status === 'error' && (
-            <Alert 
-              severity="error" 
-              className="mt-4 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200"
-            >
-              <AlertTitle className="text-red-800 dark:text-red-200 font-semibold">
-                에러 발생
-              </AlertTitle>
-              에어드랍 실행 중 오류가 발생했습니다. 다시 시도해주세요.
-            </Alert>
-          )}
-        </Paper>
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 dark:bg-red-900 text-red-700 dark:text-red-200 rounded-lg">
+          <h3 className="font-bold mb-1">에러 발생</h3>
+          <p>{error}</p>
+        </div>
       )}
-    </Box>
+
+      <button
+        className={`w-full py-3 px-4 rounded-lg font-medium text-white transition-colors
+          ${isExecuting || status.pending_count === 0
+            ? 'bg-gray-400 cursor-not-allowed'
+            : 'bg-blue-600 hover:bg-blue-700'
+          }`}
+        onClick={executeAirdrop}
+        disabled={isExecuting || status.pending_count === 0}
+      >
+        {isExecuting ? (
+          <div className="flex items-center justify-center space-x-2">
+            <CircularProgress size={20} color="inherit" />
+            <span>실행 중...</span>
+          </div>
+        ) : (
+          '에어드랍 실행'
+        )}
+      </button>
+    </div>
   );
 }

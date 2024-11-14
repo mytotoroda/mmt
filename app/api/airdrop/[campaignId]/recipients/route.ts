@@ -29,7 +29,7 @@ export async function GET(
         r.updated_at
       FROM airdrop_recipients r
       WHERE r.campaign_id = ?
-      ORDER BY r.created_at DESC`,
+      ORDER BY user_id`,
       [params.campaignId]
     );
 

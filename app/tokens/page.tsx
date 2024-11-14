@@ -9,7 +9,6 @@ interface TokenMetadataLinkProps {
   tokenId: string
 }
 
-
 const TokenMetadataLink: React.FC<TokenMetadataLinkProps> = ({ tokenId }) => {
   const handleClick = (): void => {
     window.open(`https://explorer.solana.com/address/${tokenId}/metadata?cluster=devnet`, '_blank')
@@ -37,6 +36,21 @@ const TokenMetadataLink2: React.FC<TokenMetadataLinkProps> = ({ tokenId }) => {
     >
       {tokenId}
     </p>
+  );
+};
+
+const TokenAuthLink: React.FC<TokenMetadataLinkProps> = ({ tokenId }) => {
+  const handleClick = (): void => {
+    window.location.href = `/token-auth/?token_id=${tokenId}`;
+  };
+
+  return (
+    <button 
+      onClick={handleClick}
+      className="text-sm bg-purple-500 hover:bg-purple-600 text-white px-3 py-1 rounded-lg transition-colors"
+    >
+      권한수정하기
+    </button>
   );
 };
 
@@ -148,7 +162,8 @@ const MemeCoinsPage: React.FC = () => {
                       </a>
                     </div>
                   )}
-                  <div className="mt-4 flex justify-end">
+                  <div className="mt-4 flex justify-between items-center">
+                    <TokenAuthLink tokenId={token.id} />
                     <a
                       href={`https://explorer.solana.com/address/${token.id}?cluster=devnet`}
                       target="_blank"
