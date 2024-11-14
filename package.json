@@ -5,9 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
-    "postinstall": "node-gyp-build",
-    "rebuild": "node-gyp-build"
+    "start": "next start"
   },
   "dependencies": {
     "@emotion/react": "^11.13.3",
@@ -34,7 +32,8 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "tailwind-merge": "^2.5.4",
-    "xlsx": "^0.18.5"
+    "xlsx": "^0.18.5",
+    "node-gyp-build": "^4.6.0"
   },
   "devDependencies": {
     "@shadcn/ui": "^0.0.4",
@@ -45,7 +44,6 @@
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",
-    "typescript": "^5.3.3",
-    "node-gyp-build": "^4.6.0"
+    "typescript": "^5.3.3"
   }
 }
