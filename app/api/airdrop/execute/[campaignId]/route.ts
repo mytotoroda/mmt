@@ -246,30 +246,46 @@ async function processAirdrop(
     );
 
     const total = countResult[0].total;
-    let processed = 0;
+    let lastProcessedId = 0;  // 마지막으로 처리된 ID 추적
 
     // 캠페인 상태 업데이트
     await dbConnection.execute(
       `UPDATE airdrop_campaigns 
-       SET status = 'IN_PROGRESS', updated_at = NOW()
+       SET status = 'IN_PROGRESS', 
+       updated_at = NOW()
        WHERE id = ?`,
       [campaignId]
     );
 
-    while (processed < total) {
-      // BATCH_SIZE만큼 데이터 조회
+    console.log(`Starting airdrop for campaign ${campaignId}. Total recipients: ${total}`);
+
+    while (true) {
+      // ID 기반 페이징으로 데이터 조회
       const [recipients] = await dbConnection.execute(
         `SELECT * FROM airdrop_recipients 
-         WHERE campaign_id = ? AND status IN ('PENDING', 'FAILED')
-         ORDER BY id ASC LIMIT ?, ?`,
-        [campaignId, processed, BATCH_SIZE]
+         WHERE campaign_id = ? 
+         AND status IN ('PENDING', 'FAILED')
+         AND id > ?
+         ORDER BY id ASC 
+         LIMIT ?`,
+        [campaignId, lastProcessedId, BATCH_SIZE]
       );
+
+      if (recipients.length === 0) {
+        console.log('No more recipients to process');
+        break;
+      }
+
+      console.log(`Processing batch of ${recipients.length} recipients starting from ID ${lastProcessedId + 1}`);
 
       // CHUNK_SIZE 단위로 처리
       for (let i = 0; i < recipients.length; i += CHUNK_SIZE) {
         const chunk = recipients.slice(i, i + CHUNK_SIZE);
+        const chunkNumber = Math.floor(i / CHUNK_SIZE) + 1;
+        const totalChunks = Math.ceil(recipients.length / CHUNK_SIZE);
+
         try {
-          console.log(`Processing chunk ${i / CHUNK_SIZE + 1} of ${Math.ceil(recipients.length / CHUNK_SIZE)}`);
+          console.log(`Processing chunk ${chunkNumber} of ${totalChunks}`);
           
           const signature = await processChunk(
             solanaConnection, 
@@ -315,7 +331,21 @@ async function processAirdrop(
         await new Promise(r => setTimeout(r, 2000));
       }
 
-      processed += recipients.length;
+      // 마지막으로 처리된 ID 업데이트
+      lastProcessedId = recipients[recipients.length - 1].id;
+      
+      // 진행 상황 로깅
+      const [progressResult] = await dbConnection.execute(
+        `SELECT 
+           COUNT(*) as total,
+           SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) as completed
+         FROM airdrop_recipients 
+         WHERE campaign_id = ?`,
+        [campaignId]
+      );
+      
+      console.log(`Progress: ${progressResult[0].completed}/${progressResult[0].total}`);
+      console.log(`Completed batch. Last processed ID: ${lastProcessedId}`);
     }
 
     // 최종 상태 확인 및 업데이트
@@ -337,6 +367,8 @@ async function processAirdrop(
        WHERE id = ?`,
       [isCompleted ? 'COMPLETED' : 'FAILED', campaignId]
     );
+
+    console.log(`Airdrop processing completed. Status: ${isCompleted ? 'COMPLETED' : 'FAILED'}`);
 
   } catch (error) {
     console.error('Airdrop processing error:', error);
@@ -402,7 +434,7 @@ export async function POST(
       );
     }
 
-    // 백그라운드에서 에어드랍 실행
+    //백그라운드에서 에어드랍 실행
     processAirdrop(solanaConnection, campaign, params.campaignId).catch(console.error);
 
     return NextResponse.json({ 

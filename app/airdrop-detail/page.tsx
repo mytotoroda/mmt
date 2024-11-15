@@ -5,6 +5,7 @@ import { Container, Paper, Tab, Tabs, Box } from '@mui/material';
 import CampaignInfo from '@/components/airdrop-detail/CampaignInfo';
 import AirdropExecution from '@/components/airdrop-detail/AirdropExecution';
 import RecipientManagement from '@/components/airdrop-detail/RecipientManagement';
+import CreateAta from '@/components/airdrop-detail/CreateAta';
 
 export default function AirdropDetailPage() {
   const searchParams = useSearchParams();
@@ -39,14 +40,14 @@ export default function AirdropDetailPage() {
               }}
               sx={{
                 '& .MuiTab-root': {
-                  color: 'rgb(107, 114, 128)', // text-gray-500
+                  color: 'rgb(107, 114, 128)',
                   '&.Mui-selected': {
-                    color: 'rgb(59, 130, 246)', // text-blue-500
+                    color: 'rgb(59, 130, 246)',
                   },
                   '.dark &': {
-                    color: 'rgb(156, 163, 175)', // dark:text-gray-400
+                    color: 'rgb(156, 163, 175)',
                     '&.Mui-selected': {
-                      color: 'rgb(96, 165, 250)', // dark:text-blue-400
+                      color: 'rgb(96, 165, 250)',
                     }
                   }
                 }
@@ -58,6 +59,10 @@ export default function AirdropDetailPage() {
               />
               <Tab 
                 label="대상자 관리" 
+                className="font-medium"
+              />
+              <Tab 
+                label="ATA 생성" 
                 className="font-medium"
               />
             </Tabs>
@@ -72,6 +77,12 @@ export default function AirdropDetailPage() {
           {currentTab === 1 && (
             <Box className="py-6">
               <RecipientManagement campaignId={campaignId} />
+            </Box>
+          )}
+
+          {currentTab === 2 && (
+            <Box className="py-6">
+              <CreateAta campaignId={campaignId} />
             </Box>
           )}
         </div>
