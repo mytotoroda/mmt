@@ -19,27 +19,19 @@ import {
   Alert,
   Snackbar,
   LinearProgress,
-  Chip,
-  Tooltip,
   IconButton,
   Card,
   CardContent,
   Tabs,
   Tab,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   SelectChangeEvent,
 } from '@mui/material';
 import {
   Download as DownloadIcon,
   ContentCopy as CopyIcon,
   Refresh as RefreshIcon,
-  Help as HelpIcon,
-  Save as SaveIcon,
 } from '@mui/icons-material';
-import { ThemeProvider, createTheme, Theme } from '@mui/material/styles';
+import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { useTheme as useNextTheme } from 'next-themes';
 
 interface GeneratorOptions {
@@ -47,15 +39,13 @@ interface GeneratorOptions {
   network: 'mainnet' | 'devnet' | 'testnet';
   format: 'csv' | 'json';
   includePrivateKeys: boolean;
-  includeIndex: boolean;
   includeTimestamp: boolean;
-  batchSize: number;
 }
 
-
 interface WalletData {
-  index: number;
-  publicKey: string;
+  wallet_address: string;
+  amount: number;
+  user_id: number;
   privateKey?: string;
   timestamp?: string;
 }
@@ -67,7 +57,7 @@ interface SnackbarState {
 }
 
 export default function WalletGeneratorPage() {
-  const { theme: themeMode, setTheme } = useNextTheme();
+  const { theme: themeMode } = useNextTheme();
   
   const theme = createTheme({
     palette: {
@@ -98,15 +88,12 @@ export default function WalletGeneratorPage() {
     network: 'devnet',
     format: 'csv',
     includePrivateKeys: false,
-    includeIndex: true,
     includeTimestamp: false,
-    batchSize: 1000,
   });
 
   const [wallets, setWallets] = useState<WalletData[]>([]);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<number>(0);
-  const [showPreview, setShowPreview] = useState<boolean>(false);
   const [snackbar, setSnackbar] = useState<SnackbarState>({
     open: false,
     message: '',
@@ -133,8 +120,9 @@ export default function WalletGeneratorPage() {
       for (let i = 0; i < generatorOptions.count; i++) {
         const keypair = web3.Keypair.generate();
         newWallets.push({
-          index: i + 1,
-          publicKey: keypair.publicKey.toString(),
+          wallet_address: keypair.publicKey.toString(),
+          amount: i + 1,
+          user_id: i + 1,
           privateKey: generatorOptions.includePrivateKeys ? 
             Buffer.from(keypair.secretKey).toString('base64') : undefined,
           timestamp: generatorOptions.includeTimestamp ? 
@@ -163,23 +151,31 @@ export default function WalletGeneratorPage() {
     let content = '';
     
     if (generatorOptions.format === 'csv') {
-      const headers = ['Index', 'Public Key'];
-      if (generatorOptions.includePrivateKeys) headers.push('Private Key');
-      if (generatorOptions.includeTimestamp) headers.push('Timestamp');
+      const headers = ['wallet_address', 'amount', 'user_id'];
+      if (generatorOptions.includePrivateKeys) headers.push('private_key');
+      if (generatorOptions.includeTimestamp) headers.push('timestamp');
       
       content = headers.join(',') + '\n';
       
       wallets.forEach(wallet => {
         const row = [
-          generatorOptions.includeIndex ? wallet.index : '',
-          wallet.publicKey,
+          wallet.wallet_address,
+          wallet.amount,
+          wallet.user_id,
           generatorOptions.includePrivateKeys ? wallet.privateKey : '',
           generatorOptions.includeTimestamp ? wallet.timestamp : ''
         ].filter(Boolean);
         content += row.join(',') + '\n';
       });
     } else {
-      content = JSON.stringify(wallets, null, 2);
+      const jsonWallets = wallets.map(wallet => ({
+        wallet_address: wallet.wallet_address,
+        amount: wallet.amount,
+        user_id: wallet.user_id,
+        ...(generatorOptions.includePrivateKeys && { private_key: wallet.privateKey }),
+        ...(generatorOptions.includeTimestamp && { timestamp: wallet.timestamp })
+      }));
+      content = JSON.stringify(jsonWallets, null, 2);
     }
 
     const blob = new Blob([content], { 
@@ -301,17 +297,6 @@ export default function WalletGeneratorPage() {
                   <FormControlLabel
                     control={
                       <Switch
-                        checked={generatorOptions.includeIndex}
-                        onChange={handleOptionChange('includeIndex')}
-                      />
-                    }
-                    label="Include Index"
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                  <FormControlLabel
-                    control={
-                      <Switch
                         checked={generatorOptions.includeTimestamp}
                         onChange={handleOptionChange('includeTimestamp')}
                       />
@@ -389,25 +374,25 @@ export default function WalletGeneratorPage() {
                     <Card key={index} sx={{ mb: 2 }}>
                       <CardContent>
                         <Typography variant="subtitle2" color="primary">
-                          Wallet #{wallet.index}
+                          User #{wallet.user_id}
                         </Typography>
                         <Box sx={{ 
                           display: 'flex',
                           alignItems: 'center',
-                          mt: 1
+                          mt: 1,
+                          flexDirection: 'column',
+                          alignItems: 'flex-start'
                         }}>
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              fontFamily: 'monospace',
-                              mr: 1
-                            }}
-                          >
-                            {wallet.publicKey}
+                          <Typography variant="body2" sx={{ fontFamily: 'monospace', mb: 1 }}>
+                            Wallet: {wallet.wallet_address}
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                            Amount: {wallet.amount}
                           </Typography>
                           <IconButton
                             size="small"
-                            onClick={() => copyToClipboard(wallet.publicKey)}
+                            onClick={() => copyToClipboard(wallet.wallet_address)}
+                            sx={{ ml: 1 }}
                           >
                             <CopyIcon fontSize="small" />
                           </IconButton>
@@ -460,4 +445,3 @@ export default function WalletGeneratorPage() {
     </ThemeProvider>
   );
 }
-    

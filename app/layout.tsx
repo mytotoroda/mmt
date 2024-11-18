@@ -1,14 +1,19 @@
-//ts
-import { Inter } from 'next/font/google'
-import { Metadata } from 'next'
-import './globals.css'
-import Navbar from '../components/Navbar'
-import Footer from '../components/Footer'
-import { ThemeProvider } from 'next-themes'
-import { WalletProvider } from '../contexts/WalletContext'
-import { AuthProvider } from '../contexts/AuthContext'
-import { TokenProvider } from '../contexts/TokenContext'
-import { ReactNode } from 'react'
+'use client';
+
+import { Inter } from 'next/font/google';
+import { Metadata } from 'next';
+import './globals.css';
+import Navbar from '../components/Navbar';
+import Footer from '../components/Footer';
+import { ThemeProvider as NextThemeProvider } from 'next-themes';
+import { WalletProvider } from '../contexts/WalletContext';
+import { AuthProvider } from '../contexts/AuthContext';
+import { TokenProvider } from '../contexts/TokenContext';
+import { AMMProvider } from '../contexts/AMMContext';
+import { ReactNode } from 'react';
+import { ThemeProvider as MuiThemeProvider, CssBaseline } from '@mui/material';
+import { useAppTheme } from '@/hooks/useAppTheme';
+import { MarketMakingProvider } from '../contexts/mmt/MarketMakingContext'
 
 // 전역 window 타입 확장
 declare global {
@@ -26,19 +31,23 @@ if (typeof window !== 'undefined') {
   window.process = window.process || require('process');
 }
 
-const inter = Inter({ subsets: ['latin'] })
-
-// 메타데이터 타입 지정
-export const metadata: Metadata = {
-  title: 'Solana Meme Coin Manager',
-  description: 'Manage your Solana meme coins and airdrops',
-  keywords: 'solana, meme coin, crypto, blockchain, airdrop',
-}
-
+const inter = Inter({ subsets: ['latin'] });
 
 // Props 타입 정의
 interface RootLayoutProps {
   children: ReactNode;
+}
+
+// MUI 테마 래퍼 컴포넌트
+function ThemeWrapper({ children }: { children: ReactNode }) {
+  const theme = useAppTheme();
+  
+  return (
+    <MuiThemeProvider theme={theme}>
+      <CssBaseline />
+      {children}
+    </MuiThemeProvider>
+  );
 }
 
 export default function RootLayout({ children }: RootLayoutProps) {
@@ -47,22 +56,23 @@ export default function RootLayout({ children }: RootLayoutProps) {
       <body className={`${inter.className} antialiased`}>
         <AuthProvider>
           <WalletProvider>
-          <TokenProvider>
-            <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-              <div className="min-h-screen flex flex-col bg-gray-50 dark:bg-gray-900">
-                {/* 네비게이션 바 */}
-                <Navbar />
-                
-                {/* 메인 컨텐츠 영역 */}
-                <main className="flex-grow">
-                  {children}
-                </main>
-                
-                {/* 푸터 */}
-                <Footer />
-              </div>
-            </ThemeProvider>
-          </TokenProvider>
+            <TokenProvider>
+              <AMMProvider>
+	      <MarketMakingProvider>
+                <NextThemeProvider attribute="class" defaultTheme="system" enableSystem>
+                  <ThemeWrapper>
+                    <div className="min-h-screen flex flex-col">
+                      <Navbar />
+                      <main className="flex-grow">
+                        {children}
+                      </main>
+                      <Footer />
+                    </div>
+                  </ThemeWrapper>
+                </NextThemeProvider>
+	      </MarketMakingProvider>
+              </AMMProvider>
+            </TokenProvider>
           </WalletProvider>
         </AuthProvider>
       </body>

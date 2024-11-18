@@ -192,10 +192,16 @@ return (
           토큰관리
         </Link>
         <Link 
-          href="/lp" 
+          href="/mmt" 
           className="text-gray-700 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 text-sm font-medium"
         >
           마켓메이킹
+        </Link>
+	<Link 
+          href="/amm" 
+          className="text-gray-700 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 text-sm font-medium"
+        >
+          마켓관리
         </Link>
         <Link 
           href="/make-wallet" 
