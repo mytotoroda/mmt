@@ -1,6 +1,3 @@
-// components/mmt/pools/EditPoolDialog.tsx
-'use client';
-
 import React, { useState, useEffect } from 'react';
 import {
   Dialog,
@@ -10,7 +7,6 @@ import {
   Button,
   TextField,
   Box,
-  Grid,
   FormControlLabel,
   Switch,
   Alert,
@@ -21,43 +17,43 @@ import {
   Slider,
   useTheme
 } from '@mui/material';
-import { Settings2, HelpCircle, Info } from 'lucide-react';
+import { Settings2, HelpCircle } from 'lucide-react';
 
-// Pool 타입 정의
 interface Pool {
-  id: number;
-  pool_address: string;
-  token_a_symbol: string;
-  token_b_symbol: string;
+  pool_id: number;
+  id: string;
+  poolAddress: string;
+  tokenA: {
+    symbol: string;
+    address: string;
+    decimals: number;
+  };
+  tokenB: {
+    symbol: string;
+    address: string;
+    decimals: number;
+  };
+  lastPrice: number;
+  liquidityUsd: number;
   status: 'ACTIVE' | 'PAUSED' | 'INACTIVE';
-  pool_type: 'AMM' | 'CL';
-  current_price: number | null;
-  liquidity_usd: number | null;
 }
 
-// 전략 설정 타입 정의
-interface StrategyConfig {
-  baseSpread: number;
-  bidAdjustment: number;
-  askAdjustment: number;
-  checkInterval: number;
-  minTradeSize: number;
-  maxTradeSize: number;
-  tradeSizePercentage: number;
-  targetRatio: number;
-  rebalanceThreshold: number;
-  maxPositionSize: number;
-  maxSlippage: number;
-  stopLossPercentage: number;
-  emergencyStop: boolean;
+interface PoolConfig {
+  base_spread: number;
+  bid_adjustment: number;
+  ask_adjustment: number;
+  check_interval: number;
+  min_token_a_trade: number;
+  max_token_a_trade: number;
+  min_token_b_trade: number;
+  max_token_b_trade: number;
+  trade_size_percentage: number;
+  target_ratio: number;
+  rebalance_threshold: number;
+  max_slippage: number;
+  stop_loss_percentage: number;
+  emergency_stop: boolean;
   enabled: boolean;
-}
-
-interface EditPoolDialogProps {
-  open: boolean;
-  pool: Pool;
-  onClose: () => void;
-  onSuccess: () => void;
 }
 
 interface TooltipLabelProps {
@@ -76,70 +72,85 @@ const TooltipLabel = ({ label, tooltip }: TooltipLabelProps) => (
   </Box>
 );
 
-export default function EditPoolDialog({ 
-  open, 
-  pool, 
-  onClose, 
-  onSuccess 
-}: EditPoolDialogProps) {
+interface EditPoolDialogProps {
+  open: boolean;
+  pool: Pool;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+export default function EditPoolDialog({ open, pool, onClose, onSuccess }: EditPoolDialogProps) {
   const theme = useTheme();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
-  // 전략 설정 상태
-  const [config, setConfig] = useState<StrategyConfig>({
-    baseSpread: 0.1,
-    bidAdjustment: -0.05,
-    askAdjustment: 0.05,
-    checkInterval: 30,
-    minTradeSize: 100,
-    maxTradeSize: 10000,
-    tradeSizePercentage: 5,
-    targetRatio: 0.5,
-    rebalanceThreshold: 5.0,
-    maxPositionSize: 50000,
-    maxSlippage: 1.0,
-    stopLossPercentage: 5.0,
-    emergencyStop: false,
+  const [config, setConfig] = useState<PoolConfig>({
+    base_spread: 0.2,
+    bid_adjustment: -0.05,
+    ask_adjustment: 0.05,
+    check_interval: 30,
+    min_token_a_trade: 0,
+    max_token_a_trade: 0,
+    min_token_b_trade: 0,
+    max_token_b_trade: 0,
+    trade_size_percentage: 10,
+    target_ratio: 0.5,
+    rebalance_threshold: 10,
+    max_slippage: 1.0,
+    stop_loss_percentage: 5.0,
+    emergency_stop: false,
     enabled: false
   });
 
-  // 풀의 현재 설정 로드
   useEffect(() => {
-    const loadPoolConfig = async () => {
-      try {
-        const response = await fetch(`/api/mmt/strategy/config?poolId=${pool.id}`);
-        const data = await response.json();
-        if (data.success && data.config) {
-          setConfig(data.config);
-        }
-      } catch (error) {
-        console.error('Error loading pool config:', error);
-        setError('설정을 불러오는데 실패했습니다.');
-      }
-    };
+	  const loadPoolConfig = async () => {
+	    try {
+	      const response = await fetch(`/api/mmt/pool-config/${pool.pool_id}`);
+	      if (!response.ok) throw new Error('Failed to load config');
+	      const { success, config: loadedConfig } = await response.json();
+	      
+	      if (success && loadedConfig) {
+		setConfig({
+		  base_spread: Number(loadedConfig.base_spread),
+		  bid_adjustment: Number(loadedConfig.bid_adjustment),
+		  ask_adjustment: Number(loadedConfig.ask_adjustment),
+		  check_interval: Number(loadedConfig.check_interval),
+		  min_token_a_trade: Number(loadedConfig.min_token_a_trade),
+		  max_token_a_trade: Number(loadedConfig.max_token_a_trade),
+		  min_token_b_trade: Number(loadedConfig.min_token_b_trade),
+		  max_token_b_trade: Number(loadedConfig.max_token_b_trade),
+		  trade_size_percentage: Number(loadedConfig.trade_size_percentage),
+		  target_ratio: Number(loadedConfig.target_ratio),
+		  rebalance_threshold: Number(loadedConfig.rebalance_threshold),
+		  max_slippage: Number(loadedConfig.max_slippage),
+		  stop_loss_percentage: Number(loadedConfig.stop_loss_percentage),
+		  emergency_stop: Boolean(loadedConfig.emergency_stop),
+		  enabled: Boolean(loadedConfig.enabled)
+		});
+	      }
+	    } catch (error) {
+	      console.error('Error loading pool config:', error);
+	      setError('설정을 불러오는데 실패했습니다.');
+	    }
+	  };
 
-    if (pool.id) {
-      loadPoolConfig();
-    }
-  }, [pool.id]);
+	  if (open && pool.pool_id) {
+	    loadPoolConfig();
+	  }
+	}, [pool.pool_id, open]);
 
   const handleSubmit = async () => {
     try {
       setLoading(true);
       setError('');
 
-      const response = await fetch('/api/mmt/strategy/config', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          poolId: pool.id,
-          ...config
-        }),
+      const response = await fetch(`/api/mmt/pool-config/${pool.pool_id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config),
       });
 
+      if (!response.ok) throw new Error('Failed to update config');
+      
       const data = await response.json();
       if (!data.success) {
         throw new Error(data.message || '설정 업데이트에 실패했습니다.');
@@ -156,317 +167,319 @@ export default function EditPoolDialog({
   };
 
   return (
-    <Dialog 
-      open={open} 
-      onClose={onClose} 
-      maxWidth="md" 
-      fullWidth
-      PaperProps={{
-        sx: {
-          bgcolor: theme.palette.background.paper,
-        }
-      }}
-    >
-      <DialogTitle sx={{ pb: 1 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Settings2 size={24} color={theme.palette.primary.main} />
-          <Typography variant="h6">전략 설정 수정</Typography>
+  <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+    <DialogTitle>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Settings2 />
+        <Typography variant="h6">
+          {pool.tokenA.symbol}/{pool.tokenB.symbol} Pool 설정
+        </Typography>
+      </Box>
+    </DialogTitle>
+    
+    <Divider />
+    
+    <DialogContent>
+      {error && (
+        <Alert severity="error" onClose={() => setError('')} sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        {/* 기본 스프레드 설정 */}
+        <Box>
+          <TooltipLabel 
+            label="기본 스프레드" 
+            tooltip="AMM 풀의 기본 스프레드 비율 (%)" 
+          />
+          <Slider
+            value={config.base_spread}
+            onChange={(_, value) => setConfig(prev => ({
+              ...prev,
+              base_spread: value as number
+            }))}
+            min={0.1}
+            max={1}
+            step={0.1}
+            marks
+            valueLabelDisplay="auto"
+            valueLabelFormat={v => `${v}%`}
+          />
         </Box>
-      </DialogTitle>
-      
-      <Divider />
-      
-      <DialogContent sx={{ py: 2 }}>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          {/* 풀 정보 헤더 */}
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle1" fontWeight="bold">
-              {pool.token_a_symbol}/{pool.token_b_symbol} Pool
-            </Typography>
-            <Typography 
-              variant="body2" 
-              sx={{ 
-                fontFamily: 'monospace',
-                color: theme.palette.text.secondary
-              }}
-            >
-              {pool.pool_address}
-            </Typography>
-            {pool.current_price && (
-              <Typography variant="body2" color="text.secondary">
-                현재 가격: ${pool.current_price.toFixed(4)}
+
+        {/* 스프레드 조정 */}
+        <Box>
+          <TooltipLabel 
+            label="스프레드 조정" 
+            tooltip="기본 스프레드에 대한 매수/매도 조정값" 
+          />
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mt: 1 }}>
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>
+                매수 스프레드 조정
               </Typography>
-            )}
-          </Box>
-
-          {error && (
-            <Alert 
-              severity="error" 
-              onClose={() => setError('')}
-              sx={{ mb: 2 }}
-            >
-              {error}
-            </Alert>
-          )}
-
-          {/* 기본 스프레드 설정 */}
-          <Box>
-            <TooltipLabel 
-              label="기본 스프레드" 
-              tooltip="기준이 되는 스프레드 비율" 
-            />
-            <Slider
-              value={config.baseSpread}
-              onChange={(_, value) => setConfig(prev => ({
-                ...prev,
-                baseSpread: value as number
-              }))}
-              min={0.1}
-              max={5}
-              step={0.1}
-              marks={[
-                { value: 0.1, label: '0.1%' },
-                { value: 5, label: '5%' }
-              ]}
-              valueLabelDisplay="auto"
-              valueLabelFormat={v => `${v}%`}
-              sx={{ mt: 2 }}
-            />
-          </Box>
-
-          {/* 스프레드 조정 */}
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <Box sx={{ flex: 1 }}>
-              <TooltipLabel 
-                label="매수 스프레드 조정" 
-                tooltip="기본 스프레드에서 매수 가격 조정" 
-              />
               <TextField
-                size="small"
-                type="number"
-                value={config.bidAdjustment}
-                onChange={(e) => setConfig(prev => ({
-                  ...prev,
-                  bidAdjustment: parseFloat(e.target.value)
-                }))}
-                InputProps={{
-                  endAdornment: <Typography variant="caption">%</Typography>,
-                  inputProps: { step: 0.01 }
-                }}
                 fullWidth
-                sx={{ mt: 1 }}
-              />
-            </Box>
-            <Box sx={{ flex: 1 }}>
-              <TooltipLabel 
-                label="매도 스프레드 조정" 
-                tooltip="기본 스프레드에서 매도 가격 조정" 
-              />
-              <TextField
                 size="small"
                 type="number"
-                value={config.askAdjustment}
-                onChange={(e) => setConfig(prev => ({
+                value={config.bid_adjustment}
+                onChange={e => setConfig(prev => ({
                   ...prev,
-                  askAdjustment: parseFloat(e.target.value)
+                  bid_adjustment: parseFloat(e.target.value)
                 }))}
                 InputProps={{
-                  endAdornment: <Typography variant="caption">%</Typography>,
-                  inputProps: { step: 0.01 }
+                  endAdornment: <Typography variant="caption">%</Typography>
                 }}
+              />
+            </Box>
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>
+                매도 스프레드 조정
+              </Typography>
+              <TextField
                 fullWidth
-                sx={{ mt: 1 }}
-              />
-            </Box>
-          </Box>
-
-          {/* 거래 크기 설정 */}
-          <Box>
-            <TooltipLabel 
-              label="거래 크기 설정" 
-              tooltip="개별 거래의 최소/최대 크기와 비율 설정" 
-            />
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 2, mt: 1 }}>
-              <TextField
                 size="small"
-                label="최소 크기"
                 type="number"
-                value={config.minTradeSize}
-                onChange={(e) => setConfig(prev => ({
+                value={config.ask_adjustment}
+                onChange={e => setConfig(prev => ({
                   ...prev,
-                  minTradeSize: parseFloat(e.target.value)
-                }))}
-                InputProps={{ inputProps: { min: 0 } }}
-              />
-              <TextField
-                size="small"
-                label="최대 크기"
-                type="number"
-                value={config.maxTradeSize}
-                onChange={(e) => setConfig(prev => ({
-                  ...prev,
-                  maxTradeSize: parseFloat(e.target.value)
-                }))}
-                InputProps={{ inputProps: { min: 0 } }}
-              />
-              <TextField
-                size="small"
-                label="거래 비율"
-                type="number"
-                value={config.tradeSizePercentage}
-                onChange={(e) => setConfig(prev => ({
-                  ...prev,
-                  tradeSizePercentage: parseFloat(e.target.value)
+                  ask_adjustment: parseFloat(e.target.value)
                 }))}
                 InputProps={{
-                  endAdornment: <Typography variant="caption">%</Typography>,
-                  inputProps: { min: 0, max: 100, step: 0.1 }
+                  endAdornment: <Typography variant="caption">%</Typography>
                 }}
               />
             </Box>
-          </Box>
-
-          {/* 포지션 관리 설정 */}
-          <Box>
-            <TooltipLabel 
-              label="포지션 관리" 
-              tooltip="포지션 비율 및 재조정 설정" 
-            />
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mt: 1 }}>
-              <TextField
-                size="small"
-                label="목표 비율"
-                type="number"
-                value={config.targetRatio * 100}
-                onChange={(e) => setConfig(prev => ({
-                  ...prev,
-                  targetRatio: parseFloat(e.target.value) / 100
-                }))}
-                InputProps={{
-                  endAdornment: <Typography variant="caption">%</Typography>,
-                  inputProps: { min: 0, max: 100, step: 1 }
-                }}
-              />
-              <TextField
-                size="small"
-                label="재조정 임계값"
-                type="number"
-                value={config.rebalanceThreshold}
-                onChange={(e) => setConfig(prev => ({
-                  ...prev,
-                  rebalanceThreshold: parseFloat(e.target.value)
-                }))}
-                InputProps={{
-                  endAdornment: <Typography variant="caption">%</Typography>,
-                  inputProps: { min: 0, step: 0.1 }
-                }}
-              />
-            </Box>
-          </Box>
-
-          {/* 위험 관리 설정 */}
-          <Box>
-            <TooltipLabel 
-              label="위험 관리" 
-              tooltip="슬리피지 및 손실 제한 설정" 
-            />
-            <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mt: 1 }}>
-              <TextField
-                size="small"
-                label="최대 슬리피지"
-                type="number"
-                value={config.maxSlippage}
-                onChange={(e) => setConfig(prev => ({
-                  ...prev,
-                  maxSlippage: parseFloat(e.target.value)
-                }))}
-                InputProps={{
-                  endAdornment: <Typography variant="caption">%</Typography>,
-                  inputProps: { min: 0, step: 0.1 }
-                }}
-              />
-              <TextField
-                size="small"
-                label="손절 기준"
-                type="number"
-                value={config.stopLossPercentage}
-                onChange={(e) => setConfig(prev => ({
-                  ...prev,
-                  stopLossPercentage: parseFloat(e.target.value)
-                }))}
-                InputProps={{
-                  endAdornment: <Typography variant="caption">%</Typography>,
-                  inputProps: { min: 0, step: 0.1 }
-                }}
-              />
-            </Box>
-          </Box>
-
-          {/* 전략 활성화 설정 */}
-          <Box sx={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center',
-            bgcolor: theme.palette.action.hover,
-            borderRadius: 1,
-            p: 2,
-            mt: 2
-          }}>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={config.enabled}
-                  onChange={(e) => setConfig(prev => ({
-                    ...prev,
-                    enabled: e.target.checked
-                  }))}
-                  color="success"
-                />
-              }
-              label={
-                <Typography variant="subtitle1" fontWeight="medium">
-                  전략 활성화
-                </Typography>
-              }
-            />
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={config.emergencyStop}
-                  onChange={(e) => setConfig(prev => ({
-                    ...prev,
-                    emergencyStop: e.target.checked,
-                    enabled: e.target.checked ? false : prev.enabled
-                  }))}
-                  color="error"
-                />
-              }
-              label={
-                <Typography variant="subtitle1" fontWeight="medium" color="error">
-                  긴급 중지
-                </Typography>
-              }
-            />
           </Box>
         </Box>
-      </DialogContent>
 
-      <DialogActions sx={{ px: 3, py: 2 }}>
-        <Button 
-          onClick={onClose}
-          variant="outlined"
-          disabled={loading}
-        >
-          취소
-        </Button>
-        <Button 
-          onClick={handleSubmit}
-          variant="contained"
-          disabled={loading}
-        >
-          {loading ? '저장 중...' : '설정 저장'}
-        </Button>
-      </DialogActions>
-    </Dialog>
-  );
+        {/* 거래 크기 제한 - Token A */}
+        <Box>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>
+            {pool.tokenA.symbol} 거래 크기 제한
+          </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>
+                최소 거래량
+              </Typography>
+              <TextField
+                fullWidth
+                size="small"
+                type="number"
+                value={config.min_token_a_trade}
+                onChange={e => setConfig(prev => ({
+                  ...prev,
+                  min_token_a_trade: parseFloat(e.target.value)
+                }))}
+              />
+            </Box>
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>
+                최대 거래량
+              </Typography>
+              <TextField
+                fullWidth
+                size="small"
+                type="number"
+                value={config.max_token_a_trade}
+                onChange={e => setConfig(prev => ({
+                  ...prev,
+                  max_token_a_trade: parseFloat(e.target.value)
+                }))}
+              />
+            </Box>
+          </Box>
+        </Box>
+
+        {/* 거래 크기 제한 - Token B */}
+        <Box>
+          <Typography variant="subtitle2" sx={{ mb: 1 }}>
+            {pool.tokenB.symbol} 거래 크기 제한
+          </Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>
+                최소 거래량
+              </Typography>
+              <TextField
+                fullWidth
+                size="small"
+                type="number"
+                value={config.min_token_b_trade}
+                onChange={e => setConfig(prev => ({
+                  ...prev,
+                  min_token_b_trade: parseFloat(e.target.value)
+                }))}
+              />
+            </Box>
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>
+                최대 거래량
+              </Typography>
+              <TextField
+                fullWidth
+                size="small"
+                type="number"
+                value={config.max_token_b_trade}
+                onChange={e => setConfig(prev => ({
+                  ...prev,
+                  max_token_b_trade: parseFloat(e.target.value)
+                }))}
+              />
+            </Box>
+          </Box>
+        </Box>
+
+        {/* 리밸런싱 설정 */}
+        <Box>
+          <TooltipLabel 
+            label="리밸런싱 설정" 
+            tooltip="포지션 리밸런싱 관련 설정" 
+          />
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mt: 1 }}>
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>
+                목표 비율
+              </Typography>
+              <TextField
+                fullWidth
+                size="small"
+                type="number"
+                value={config.target_ratio * 100}
+                onChange={e => setConfig(prev => ({
+                  ...prev,
+                  target_ratio: parseFloat(e.target.value) / 100
+                }))}
+                InputProps={{
+                  endAdornment: <Typography variant="caption">%</Typography>
+                }}
+              />
+            </Box>
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>
+                리밸런싱 임계값
+              </Typography>
+              <TextField
+                fullWidth
+                size="small"
+                type="number"
+                value={config.rebalance_threshold}
+                onChange={e => setConfig(prev => ({
+                  ...prev,
+                  rebalance_threshold: parseFloat(e.target.value)
+                }))}
+                InputProps={{
+                  endAdornment: <Typography variant="caption">%</Typography>
+                }}
+              />
+            </Box>
+          </Box>
+        </Box>
+
+        {/* 리스크 관리 설정 */}
+        <Box>
+          <TooltipLabel 
+            label="리스크 관리" 
+            tooltip="거래 실행 관련 안전장치" 
+          />
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2, mt: 1 }}>
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>
+                최대 슬리피지
+              </Typography>
+              <TextField
+                fullWidth
+                size="small"
+                type="number"
+                value={config.max_slippage}
+                onChange={e => setConfig(prev => ({
+                  ...prev,
+                  max_slippage: parseFloat(e.target.value)
+                }))}
+                InputProps={{
+                  endAdornment: <Typography variant="caption">%</Typography>
+                }}
+              />
+            </Box>
+            <Box>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5 }}>
+                손절 기준
+              </Typography>
+              <TextField
+                fullWidth
+                size="small"
+                type="number"
+                value={config.stop_loss_percentage}
+                onChange={e => setConfig(prev => ({
+                  ...prev,
+                  stop_loss_percentage: parseFloat(e.target.value)
+                }))}
+                InputProps={{
+                  endAdornment: <Typography variant="caption">%</Typography>
+                }}
+              />
+            </Box>
+          </Box>
+        </Box>
+
+        {/* 전략 활성화 설정 */}
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'space-between',
+          bgcolor: 'action.hover',
+          borderRadius: 1,
+          p: 2
+        }}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={config.enabled}
+                onChange={e => setConfig(prev => ({
+                  ...prev,
+                  enabled: e.target.checked,
+                  emergency_stop: e.target.checked ? false : prev.emergency_stop
+                }))}
+                color="success"
+              />
+            }
+            label={
+              <Typography variant="subtitle2">전략 활성화</Typography>
+            }
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                checked={config.emergency_stop}
+                onChange={e => setConfig(prev => ({
+                  ...prev,
+                  emergency_stop: e.target.checked,
+                  enabled: e.target.checked ? false : prev.enabled
+                }))}
+                color="error"
+              />
+            }
+            label={
+              <Typography variant="subtitle2" color="error">긴급 중지</Typography>
+            }
+          />
+        </Box>
+      </Box>
+    </DialogContent>
+
+    <DialogActions sx={{ p: 2 }}>
+      <Button onClick={onClose} variant="outlined">
+        취소
+      </Button>
+      <Button 
+        onClick={handleSubmit} 
+        variant="contained"
+        disabled={loading}
+      >
+        {loading ? '저장 중...' : '설정 저장'}
+      </Button>
+    </DialogActions>
+  </Dialog>
+);
 }

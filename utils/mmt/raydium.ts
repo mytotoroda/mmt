@@ -1,11 +1,5 @@
-// utils/mmt/raydium.ts
 import { Connection, PublicKey } from '@solana/web3.js';
-import { 
-  LIQUIDITY_STATE_LAYOUT_V4, 
-  // 추가 레이아웃들
-} from '@raydium-io/raydium-sdk';
-
-
+import { AmmV3, Clmm } from '@raydium-io/raydium-sdk-v2';
 
 export const calculatePoolPrice = (
   baseReserve: number,
@@ -26,70 +20,63 @@ export const verifyRaydiumPool = async (
 ) => {
   try {
     console.log('Verifying pool address:', poolAddress);
-    
     const poolPublicKey = new PublicKey(poolAddress);
-    const poolInfo = await connection.getAccountInfo(poolPublicKey);
     
-    if (!poolInfo) {
-      console.log('Pool account not found');
-      return null;
-    }
-
-    console.log('Pool data length:', poolInfo.data.length);
-
-    // 여러 레이아웃 시도
-    let poolState;
+    // AMM V3 풀 정보 조회 시도
     try {
-      // V4 레이아웃 시도
-      poolState = LIQUIDITY_STATE_LAYOUT_V4.decode(poolInfo.data);
-    } catch (e) {
-      try {
-        // V3 레이아웃 시도
-        poolState = LIQUIDITY_STATE_LAYOUT_V3.decode(poolInfo.data);
-      } catch (e) {
-        console.log('Failed to decode pool state with V3 and V4 layouts');
-        // 기본값으로 처리
+      const poolsInfo = await AmmV3.getPools({
+        connection,
+        poolIds: [poolPublicKey]
+      });
+
+      if (poolsInfo && poolsInfo.length > 0) {
+        const poolInfo = poolsInfo[0];
         return {
-          baseDecimals: 9,
-          quoteDecimals: 9,
+          baseDecimals: poolInfo.tokenA?.decimals || 9,
+          quoteDecimals: poolInfo.tokenB?.decimals || 9,
           lpDecimals: 9,
-          baseReserve: 0,
-          quoteReserve: 0,
-          lpSupply: 0,
+          baseReserve: Number(poolInfo.tokenA?.amount || 0),
+          quoteReserve: Number(poolInfo.tokenB?.amount || 0),
+          lpSupply: 0, // AmmV3에서는 사용하지 않음
           startTime: Date.now() / 1000,
-          programId: poolInfo.owner.toString(),
+          programId: poolInfo.programId?.toString() || 'unknown',
           ammId: poolAddress,
-          status: 'ACTIVE'
+          status: 'ACTIVE',
+          poolType: 'AMM'
         };
       }
+    } catch (e) {
+      console.log('Failed to get AMM V3 pool info, trying Clmm...');
     }
 
-    console.log('Successfully decoded pool state:', poolState);
+    // Concentrated Liquidity 풀 정보 조회 시도
+    try {
+      const clmmPool = await Clmm.getPool({
+        connection,
+        poolId: poolPublicKey
+      });
 
-    return {
-      baseDecimals: poolState.baseDecimals || 9,
-      quoteDecimals: poolState.quoteDecimals || 9,
-      lpDecimals: poolState.lpDecimals || 9,
-      baseReserve: typeof poolState.baseReserve?.toNumber === 'function' 
-        ? poolState.baseReserve.toNumber() 
-        : 0,
-      quoteReserve: typeof poolState.quoteReserve?.toNumber === 'function'
-        ? poolState.quoteReserve.toNumber()
-        : 0,
-      lpSupply: typeof poolState.lpSupply?.toNumber === 'function'
-        ? poolState.lpSupply.toNumber()
-        : 0,
-      startTime: typeof poolState.startTime?.toNumber === 'function'
-        ? poolState.startTime.toNumber()
-        : Date.now() / 1000,
-      programId: poolState.programId?.toString() || poolInfo.owner.toString(),
-      ammId: poolState.id?.toString() || poolAddress,
-      status: poolState.status ? 'ACTIVE' : 'INACTIVE'
-    };
+      if (clmmPool) {
+        return {
+          baseDecimals: clmmPool.tokenA?.decimals || 9,
+          quoteDecimals: clmmPool.tokenB?.decimals || 9,
+          lpDecimals: 9,
+          baseReserve: Number(clmmPool.tokenA?.amount || 0),
+          quoteReserve: Number(clmmPool.tokenB?.amount || 0),
+          lpSupply: 0,
+          startTime: Date.now() / 1000,
+          programId: clmmPool.programId?.toString() || 'unknown',
+          ammId: poolAddress,
+          status: 'ACTIVE',
+          poolType: 'CL',
+          currentPrice: clmmPool.currentPrice
+        };
+      }
+    } catch (e) {
+      console.log('Failed to get Clmm pool info');
+    }
 
-  } catch (error) {
-    console.error('Error in verifyRaydiumPool:', error);
-    // 에러가 나도 기본값으로 처리
+    // 기본값 반환
     return {
       baseDecimals: 9,
       quoteDecimals: 9,
@@ -100,7 +87,24 @@ export const verifyRaydiumPool = async (
       startTime: Date.now() / 1000,
       programId: 'unknown',
       ammId: poolAddress,
-      status: 'ACTIVE'
+      status: 'ACTIVE',
+      poolType: 'UNKNOWN'
+    };
+
+  } catch (error) {
+    console.error('Error in verifyRaydiumPool:', error);
+    return {
+      baseDecimals: 9,
+      quoteDecimals: 9,
+      lpDecimals: 9,
+      baseReserve: 0,
+      quoteReserve: 0,
+      lpSupply: 0,
+      startTime: Date.now() / 1000,
+      programId: 'unknown',
+      ammId: poolAddress,
+      status: 'ACTIVE',
+      poolType: 'UNKNOWN'
     };
   }
 };

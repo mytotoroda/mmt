@@ -13,7 +13,7 @@ export async function GET() {
     
     // 활성 풀 목록 조회
     const [pools] = await connection.query(
-      `SELECT * FROM amm_pools WHERE status = 'ACTIVE' ORDER BY created_at DESC`
+      `SELECT * FROM mmt_pools WHERE status = 'ACTIVE' ORDER BY created_at DESC`
     );
 
     return NextResponse.json({ 
@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     try {
       // 새로운 풀 생성
       const [result] = await connection.query(
-        `INSERT INTO amm_pools (
+        `INSERT INTO mmt_pools (
           pool_address,
           token_a_address,
           token_b_address,

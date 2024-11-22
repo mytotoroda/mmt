@@ -1,75 +1,49 @@
-// types/mmt/raydium.d.ts
-declare module '@raydium-io/raydium-sdk' {
-  import { PublicKey } from '@solana/web3.js';
-  import BN from 'bn.js';
+declare module '@raydium-io/raydium-sdk-v2' {
+  import { Connection, PublicKey } from '@solana/web3.js';
+  
+  export interface AmmV3PoolInfo {
+    tokenA: {
+      amount: number;
+    };
+    tokenB: {
+      amount: number;
+    };
+  }
 
-  export class Liquidity {
-    static fetchInfo(params: {
+  export interface ClmmPoolInfo {
+    tokenA: {
+      amount: number;
+    };
+    tokenB: {
+      amount: number;
+    };
+    currentPrice: number;
+  }
+
+  export class AmmV3 {
+    static getPools(params: {
       connection: Connection;
-      poolKeys: {
-        id: PublicKey;
-        programId: PublicKey;
-      };
-    }): Promise<any>;
+      poolIds: PublicKey[];
+    }): Promise<AmmV3PoolInfo[]>;
+  }
 
-    static computeAnotherAmount(params: {
-      poolKeys: any;
-      poolInfo: any;
-      amount: TokenAmount;
-      anotherCurrency: Currency;
-      slippage: number;
+  export class Clmm {
+    static getPool(params: {
+      connection: Connection;
+      poolId: PublicKey;
+    }): Promise<ClmmPoolInfo>;
+
+    static getPoolApr(params: {
+      connection: Connection;
+      poolId: PublicKey;
+      period: string;
     }): Promise<{
-      anotherAmount: TokenAmount;
-      minAnotherAmount: TokenAmount;
-      currentPrice: Price;
-      executionPrice: Price;
-      priceImpact: Percent;
-      fee: TokenAmount;
+      fee24h: number;
+      fee7d: number;
+      fee30d: number;
+      apy24h: number;
+      apy7d: number;
+      apy30d: number;
     }>;
   }
-
-  export class Token {
-    public readonly chainId: number;
-    public readonly address: string;
-    public readonly decimals: number;
-    public readonly symbol: string;
-    public readonly name: string;
-
-    constructor(
-      chainId: number,
-      address: string,
-      decimals: number,
-      symbol: string,
-      name: string
-    );
-  }
-
-  export class TokenAmount {
-    public readonly token: Token;
-    public readonly amount: BN;
-
-    constructor(token: Token, amount: BN | number | string);
-  }
-
-  export class Percent {
-    constructor(numerator: BN, denominator?: BN);
-  }
-
-  export class Price {
-    constructor(
-      baseCurrency: Currency,
-      quoteCurrency: Currency,
-      denominator: BN,
-      numerator: BN
-    );
-  }
-
-  export interface Currency {
-    readonly decimals: number;
-    readonly symbol?: string;
-    readonly name?: string;
-  }
-
-  export const MAINNET_PROGRAM_ID: string;
-  export const DEVNET_PROGRAM_ID: string;
 }

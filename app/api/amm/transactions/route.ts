@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     try {
       // 1. 풀 정보 조회
       const [pools] = await connection.query(
-        'SELECT * FROM amm_pools WHERE id = ?',
+        'SELECT * FROM mmt_pools WHERE id = ?',
         [poolId]
       );
 
@@ -138,7 +138,7 @@ async function handleSwap(
 
   // 4. 풀 리저브 업데이트
   await connection.query(
-    `UPDATE amm_pools 
+    `UPDATE mmt_pools 
      SET token_a_reserve = token_a_reserve + ?,
          token_b_reserve = token_b_reserve - ?
      WHERE id = ?`,
@@ -154,7 +154,7 @@ async function handleAddLiquidity(
   tokenBAmount: number
 ) {
   await connection.query(
-    `UPDATE amm_pools 
+    `UPDATE mmt_pools 
      SET token_a_reserve = token_a_reserve + ?,
          token_b_reserve = token_b_reserve + ?
      WHERE id = ?`,
@@ -176,7 +176,7 @@ async function handleRemoveLiquidity(
   }
 
   await connection.query(
-    `UPDATE amm_pools 
+    `UPDATE mmt_pools 
      SET token_a_reserve = token_a_reserve - ?,
          token_b_reserve = token_b_reserve - ?
      WHERE id = ?`,

@@ -1,16 +1,21 @@
-// app/mmt/wallets/page.tsx
 'use client';
 
-import React from 'react';
-import { Box, Typography } from '@mui/material';
+import dynamic from 'next/dynamic';
+import { Suspense } from 'react';
+import { LinearProgress } from '@mui/material';
 
-export default function MMTWallets() {
+const WalletManagement = dynamic(
+  () => import('@/components/mmt/WalletManagement'),
+  { 
+    ssr: false,
+    loading: () => <LinearProgress />
+  }
+);
+
+export default function WalletsPage() {
   return (
-    <Box>
-      <Typography variant="h4" sx={{ mb: 3 }}>
-        지갑 관리
-      </Typography>
-      {/* 지갑 관리 컨텐츠 */}
-    </Box>
+    <Suspense fallback={<LinearProgress />}>
+      <WalletManagement />
+    </Suspense>
   );
 }

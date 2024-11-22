@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
         p.token_b_address as quote_token_address,
         p.pool_address,
         COALESCE(SUM(t.token_b_amount), 0) as volume_24h
-      FROM amm_pools p
+      FROM mmt_pools p
       LEFT JOIN amm_transactions t ON 
         p.id = t.pool_id AND 
         t.created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)

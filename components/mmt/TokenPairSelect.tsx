@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+// components/mmt/TokenPairSelect.tsx
+import React, { useEffect } from 'react';
 import { 
   Box, 
   TextField, 
@@ -6,77 +7,67 @@ import {
   Typography, 
   Avatar,
   CircularProgress,
-  useTheme
+  useTheme,
+  Chip
 } from '@mui/material';
-import { Coins } from 'lucide-react';
+import { Droplets } from 'lucide-react';
+import { useMMT } from '@/contexts/mmt/MMTContext';
 
-interface TokenPair {
-  id: string;
+// AMMPool 타입은 MMTContext와 공유
+interface TokenInfo {
+  address: string;
   symbol: string;
-  baseToken: {
-    address: string;
-    symbol: string;
-    name: string;
-    logoURI?: string;
-  };
-  quoteToken: {
-    address: string;
-    symbol: string;
-    name: string;
-    logoURI?: string;
-  };
+  name: string;
+  decimals: number;
+  logoURI?: string;
+}
+
+interface AMMPool {
+  id: number; // number 타입으로 변경
+  poolAddress: string;
+  tokenA: TokenInfo;
+  tokenB: TokenInfo;
   lastPrice: number;
   priceChangePercent24h: number;
+  liquidityUsd: number;
+  volume24h: number;
+  fee: number;
+  status: 'ACTIVE' | 'PAUSED' | 'INACTIVE';
 }
 
-interface TokenPairSelectProps {
-  value: string;
-  onChange: (value: string) => void;
-}
-
-const TokenPairSelect: React.FC<TokenPairSelectProps> = ({ value, onChange }) => {
+export default function TokenPairSelect() {
   const theme = useTheme();
-  const [pairs, setPairs] = useState<TokenPair[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [inputValue, setInputValue] = useState('');
-  const [selectedPair, setSelectedPair] = useState<TokenPair | null>(null);
+  const { 
+    pools,
+    selectedPool, 
+    setSelectedPool,
+    refreshPools,
+    isLoading: loading 
+  } = useMMT();
+  const [inputValue, setInputValue] = React.useState('');
 
   useEffect(() => {
-    fetchTokenPairs();
+    refreshPools();
   }, []);
 
-  useEffect(() => {
-    if (value && pairs.length > 0) {
-      const pair = pairs.find(p => p.id === value);
-      setSelectedPair(pair || null);
-    }
-  }, [value, pairs]);
-
-  const fetchTokenPairs = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch('/api/mmt/token-pairs');
-      if (response.ok) {
-        const data = await response.json();
-        setPairs(data);
-        
-        // If there's no selected value and we have pairs, select the first one
-        if (!value && data.length > 0) {
-          onChange(data[0].id);
-        }
-      }
-    } catch (error) {
-      console.error('Failed to fetch token pairs:', error);
-    } finally {
-      setLoading(false);
-    }
+  const handlePoolChange = (pool: AMMPool | null) => {
+    setSelectedPool(pool);
   };
 
-  const formatPrice = (price: number) => {
+  const formatNumber = (num: number, digits: number = 2) => {
     return new Intl.NumberFormat('en-US', {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 6
-    }).format(price);
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits
+    }).format(num);
+  };
+
+  const formatCurrency = (num: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      notation: 'compact',
+      maximumFractionDigits: 2
+    }).format(num);
   };
 
   return (
@@ -87,32 +78,27 @@ const TokenPairSelect: React.FC<TokenPairSelectProps> = ({ value, onChange }) =>
         gap: 1,
         mb: 2
       }}>
-        <Coins size={20} />
+        <Droplets size={20} />
         <Typography variant="h6" component="h2" sx={{ color: 'text.primary' }}>
-          Select Token Pair
+          Select AMM Pool
         </Typography>
       </Box>
 
       <Autocomplete
-        value={selectedPair}
-        onChange={(_, newValue) => {
-          setSelectedPair(newValue);
-          if (newValue) {
-            onChange(newValue.id);
-          }
-        }}
+        value={selectedPool}
+        onChange={(_, newValue) => handlePoolChange(newValue)}
         inputValue={inputValue}
         onInputChange={(_, newInputValue) => {
           setInputValue(newInputValue);
         }}
-        options={pairs}
+        options={pools}
         loading={loading}
-        getOptionLabel={(option) => `${option.baseToken.symbol}/${option.quoteToken.symbol}`}
+        getOptionLabel={(option) => `${option.tokenA.symbol}/${option.tokenB.symbol}`}
         isOptionEqualToValue={(option, value) => option.id === value.id}
         renderInput={(params) => (
           <TextField
             {...params}
-            placeholder="Search token pairs..."
+            placeholder="Search AMM pools..."
             InputProps={{
               ...params.InputProps,
               endAdornment: (
@@ -137,7 +123,7 @@ const TokenPairSelect: React.FC<TokenPairSelectProps> = ({ value, onChange }) =>
             }}
           />
         )}
-        renderOption={(props, option) => (
+        renderOption={(props, pool) => (
           <Box
             component="li"
             {...props}
@@ -153,55 +139,77 @@ const TokenPairSelect: React.FC<TokenPairSelectProps> = ({ value, onChange }) =>
               display: 'flex', 
               alignItems: 'center',
               justifyContent: 'space-between',
-              width: '100%'
+              width: '100%',
+              gap: 2
             }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              {/* Token Pair Info */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: '1 1 auto' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  {option.baseToken.logoURI && (
+                  {pool.tokenA.logoURI && (
                     <Avatar 
-                      src={option.baseToken.logoURI} 
-                      alt={option.baseToken.symbol}
+                      src={pool.tokenA.logoURI} 
+                      alt={pool.tokenA.symbol}
                       sx={{ width: 24, height: 24 }}
                     />
                   )}
                   <Typography variant="body1">
-                    {option.baseToken.symbol}
+                    {pool.tokenA.symbol}
                   </Typography>
                 </Box>
                 <Typography color="text.secondary">/</Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                  {option.quoteToken.logoURI && (
+                  {pool.tokenB.logoURI && (
                     <Avatar 
-                      src={option.quoteToken.logoURI} 
-                      alt={option.quoteToken.symbol}
+                      src={pool.tokenB.logoURI} 
+                      alt={pool.tokenB.symbol}
                       sx={{ width: 24, height: 24 }}
                     />
                   )}
                   <Typography variant="body1">
-                    {option.quoteToken.symbol}
+                    {pool.tokenB.symbol}
                   </Typography>
                 </Box>
               </Box>
 
+              {/* Pool Statistics */}
               <Box sx={{ 
                 display: 'flex', 
-                flexDirection: 'column', 
-                alignItems: 'flex-end'
+                gap: 2,
+                alignItems: 'center'
               }}>
-                <Typography variant="body2">
-                  ${formatPrice(option.lastPrice)}
-                </Typography>
-                <Typography
-                  variant="caption"
-                  sx={{
-                    color: option.priceChangePercent24h >= 0 
-                      ? 'success.main' 
-                      : 'error.main'
-                  }}
-                >
-                  {option.priceChangePercent24h >= 0 ? '+' : ''}
-                  {option.priceChangePercent24h.toFixed(2)}%
-                </Typography>
+                <Box sx={{ textAlign: 'right' }}>
+                  <Typography variant="body2">
+                    ${formatNumber(pool.lastPrice, 6)}
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: pool.priceChangePercent24h >= 0 
+                        ? 'success.main' 
+                        : 'error.main'
+                    }}
+                  >
+                    {pool.priceChangePercent24h >= 0 ? '+' : ''}
+                    {formatNumber(pool.priceChangePercent24h)}%
+                  </Typography>
+                </Box>
+                <Box sx={{ textAlign: 'right', minWidth: 100 }}>
+                  <Typography variant="body2">
+                    {formatCurrency(pool.liquidityUsd)}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Liquidity
+                  </Typography>
+                </Box>
+                <Chip
+                  label={pool.status}
+                  size="small"
+                  color={
+                    pool.status === 'ACTIVE' ? 'success' :
+                    pool.status === 'PAUSED' ? 'warning' : 'error'
+                  }
+                  sx={{ minWidth: 80 }}
+                />
               </Box>
             </Box>
           </Box>
@@ -209,32 +217,41 @@ const TokenPairSelect: React.FC<TokenPairSelectProps> = ({ value, onChange }) =>
         fullWidth
       />
 
-      {selectedPair && (
-        <Box sx={{ mt: 2, p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
+      {selectedPool && (
+        <Box sx={{ 
+          mt: 2, 
+          p: 2, 
+          bgcolor: 'background.paper', 
+          borderRadius: 1,
+          border: 1,
+          borderColor: 'divider'
+        }}>
           <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-            Selected Pair Details
+            Pool Details
           </Typography>
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 2 }}>
             <Box>
               <Typography variant="body2" color="text.secondary">
-                Base Token
+                Pool Address
               </Typography>
-              <Typography variant="body1">
-                {selectedPair.baseToken.name} ({selectedPair.baseToken.symbol})
-              </Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-all' }}>
-                {selectedPair.baseToken.address}
+              <Typography variant="caption" sx={{ wordBreak: 'break-all' }}>
+                {selectedPool.poolAddress}
               </Typography>
             </Box>
-            <Box sx={{ textAlign: 'right' }}>
+            <Box>
               <Typography variant="body2" color="text.secondary">
-                Quote Token
+                24h Volume
               </Typography>
               <Typography variant="body1">
-                {selectedPair.quoteToken.name} ({selectedPair.quoteToken.symbol})
+                {formatCurrency(selectedPool.volume24h)}
               </Typography>
-              <Typography variant="caption" color="text.secondary" sx={{ wordBreak: 'break-all' }}>
-                {selectedPair.quoteToken.address}
+            </Box>
+            <Box>
+              <Typography variant="body2" color="text.secondary">
+                Fee Rate
+              </Typography>
+              <Typography variant="body1">
+                {(selectedPool.fee * 100).toFixed(2)}%
               </Typography>
             </Box>
           </Box>
@@ -242,6 +259,4 @@ const TokenPairSelect: React.FC<TokenPairSelectProps> = ({ value, onChange }) =>
       )}
     </Box>
   );
-};
-
-export default TokenPairSelect;
+}

@@ -9,19 +9,14 @@ export async function GET(request: NextRequest) {
   let connection = null;
 
   try {
-    // URL 파라미터 파싱
     const searchParams = request.nextUrl.searchParams;
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '10', 10);
     const search = searchParams.get('search') || '';
     const status = searchParams.get('status') || '';
-    const direction = searchParams.get('direction') || '';
     const actionType = searchParams.get('action_type') || '';
 
-    // 오프셋 계산
     const offset = (page - 1) * limit;
-
-    // 검색 조건 구성
     const whereConditions = [];
     const queryParams = [];
 
@@ -29,17 +24,10 @@ export async function GET(request: NextRequest) {
       whereConditions.push('tx.tx_signature LIKE ?');
       queryParams.push(`%${search}%`);
     }
-
     if (status) {
       whereConditions.push('tx.status = ?');
       queryParams.push(status);
     }
-
-    if (direction) {
-      whereConditions.push('tx.direction = ?');
-      queryParams.push(direction);
-    }
-
     if (actionType) {
       whereConditions.push('tx.action_type = ?');
       queryParams.push(actionType);
@@ -65,12 +53,17 @@ export async function GET(request: NextRequest) {
         tx.id,
         tx.created_at,
         tx.action_type,
-        tx.direction,
-        tx.amount,
+        tx.token_a_amount,
+        tx.token_b_amount,
         tx.price,
+        tx.price_impact,
+        tx.fee_amount,
         tx.gas_used,
         tx.status,
         tx.tx_signature,
+        tx.total_cost_usd,
+        tx.minimum_received,
+        tx.actual_received,
         p.token_a_symbol,
         p.token_b_symbol
        FROM mmt_transactions tx
@@ -81,9 +74,19 @@ export async function GET(request: NextRequest) {
       [...queryParams, limit, offset]
     );
 
+    // 트랜잭션 데이터 가공
+    const formattedTransactions = transactions.map(tx => ({
+      ...tx,
+      // AMM은 direction이 없으므로 token_a_amount와 token_b_amount로 방향 유추
+      direction: tx.token_a_amount > 0 ? 'BUY' : 'SELL',
+      // 표시할 amount는 주요 거래 토큰의 양
+      amount: Math.abs(tx.token_a_amount || tx.token_b_amount),
+      created_at: new Date(tx.created_at).toISOString()
+    }));
+
     return NextResponse.json({
       success: true,
-      transactions,
+      transactions: formattedTransactions,
       total: countResult[0].total,
       page,
       limit
@@ -98,7 +101,6 @@ export async function GET(request: NextRequest) {
       },
       { status: 500 }
     );
-
   } finally {
     if (connection) {
       connection.release();

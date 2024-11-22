@@ -1,6 +1,6 @@
 // app/mmt/orders/page.tsx
 'use client';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { formatNumber } from '@/utils/mmt/formatters';
 import { 
   Container,
@@ -24,20 +24,23 @@ import {
   CircularProgress
 } from '@mui/material';
 import { useTheme as useNextTheme } from 'next-themes';
-import { Info, TrendingUp, TrendingDown, Search, X } from 'lucide-react';
+import { Info, Search, X } from 'lucide-react';
 
 interface Transaction {
   id: number;
   created_at: string;
   token_a_symbol: string;
   token_b_symbol: string;
-  action_type: 'SWAP' | 'REBALANCE';
-  direction: 'BUY' | 'SELL';
-  amount: number;
+  action_type: 'SWAP' | 'REBALANCE' | 'LIQUIDITY_ADD' | 'LIQUIDITY_REMOVE';
+  token_a_amount: number;
+  token_b_amount: number;
   price: number;
+  price_impact: number;
+  fee_amount: number;
   gas_used: number;
-  status: 'SUCCESS' | 'FAILED';
+  status: 'PENDING' | 'SUCCESS' | 'FAILED' | 'REVERTED';
   tx_signature: string;
+  total_cost_usd: number;
 }
 
 interface PaginationState {
@@ -48,9 +51,8 @@ interface PaginationState {
 
 interface FilterState {
   search: string;
-  status?: 'SUCCESS' | 'FAILED' | '';
-  direction?: 'BUY' | 'SELL' | '';
-  action_type?: 'SWAP' | 'REBALANCE' | '';
+  status?: 'PENDING' | 'SUCCESS' | 'FAILED' | 'REVERTED' | '';
+  action_type?: 'SWAP' | 'REBALANCE' | 'LIQUIDITY_ADD' | 'LIQUIDITY_REMOVE' | '';
 }
 
 export default function OrdersPage() {
@@ -58,7 +60,6 @@ export default function OrdersPage() {
   const { resolvedTheme } = useNextTheme();
   const isDark = resolvedTheme === 'dark';
   
-  // 상태 관리
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(false);
   const [pagination, setPagination] = useState<PaginationState>({
@@ -67,15 +68,12 @@ export default function OrdersPage() {
     total: 0
   });
   
-  // 필터 상태
   const [filters, setFilters] = useState<FilterState>({
     search: '',
     status: '',
-    direction: '',
     action_type: ''
   });
   
-  // 데이터 가져오기
   const fetchTransactions = async () => {
     setLoading(true);
     try {
@@ -84,7 +82,6 @@ export default function OrdersPage() {
         limit: pagination.limit.toString(),
         ...(filters.search && { search: filters.search }),
         ...(filters.status && { status: filters.status }),
-        ...(filters.direction && { direction: filters.direction }),
         ...(filters.action_type && { action_type: filters.action_type })
       });
 
@@ -105,19 +102,16 @@ export default function OrdersPage() {
     }
   };
 
-  // 필터나 페이지 변경시 데이터 새로고침
   useEffect(() => {
     fetchTransactions();
     const interval = setInterval(fetchTransactions, 30000);
     return () => clearInterval(interval);
   }, [pagination.page, pagination.limit, filters]);
 
-  // 페이지 변경 핸들러
   const handlePageChange = (event: unknown, newPage: number) => {
     setPagination(prev => ({ ...prev, page: newPage }));
   };
 
-  // 페이지당 행 수 변경 핸들러
   const handleRowsPerPageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setPagination(prev => ({
       ...prev,
@@ -126,37 +120,64 @@ export default function OrdersPage() {
     }));
   };
 
-  // 검색어 변경 핸들러 (디바운스 적용)
   const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const { value } = event.target;
     setFilters(prev => ({ ...prev, search: value }));
   };
 
-  // 필터 초기화
   const handleClearFilters = () => {
     setFilters({
       search: '',
       status: '',
-      direction: '',
       action_type: ''
     });
     setPagination(prev => ({ ...prev, page: 0 }));
   };
 
-  // 상태별 색상 및 아이콘
   const getStatusColor = (status: string) => {
-    return status === 'SUCCESS' ? 'success' : 'error';
+    switch (status) {
+      case 'SUCCESS':
+        return 'success';
+      case 'PENDING':
+        return 'warning';
+      case 'FAILED':
+      case 'REVERTED':
+        return 'error';
+      default:
+        return 'default';
+    }
   };
 
-  const DirectionIcon = ({ direction }: { direction: string }) => {
-    return direction === 'BUY' ? (
-      <TrendingUp color={muiTheme.palette.success.main} size={20} />
-    ) : (
-      <TrendingDown color={muiTheme.palette.error.main} size={20} />
-    );
+  const getActionTypeColor = (type: string) => {
+    switch (type) {
+      case 'SWAP':
+        return 'primary';
+      case 'REBALANCE':
+        return 'warning';
+      case 'LIQUIDITY_ADD':
+        return 'success';
+      case 'LIQUIDITY_REMOVE':
+        return 'error';
+      default:
+        return 'default';
+    }
   };
 
-  // 검색 필터 섹션 스타일
+  const getActionTypeLabel = (type: string) => {
+    switch (type) {
+      case 'SWAP':
+        return '스왑';
+      case 'REBALANCE':
+        return '재조정';
+      case 'LIQUIDITY_ADD':
+        return '유동성 추가';
+      case 'LIQUIDITY_REMOVE':
+        return '유동성 제거';
+      default:
+        return type;
+    }
+  };
+
   const filterSectionStyles = {
     p: 3,
     mb: 3,
@@ -167,7 +188,6 @@ export default function OrdersPage() {
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
-      {/* 검색 및 필터 섹션 */}
       <Paper elevation={0} sx={filterSectionStyles}>
         <Stack direction="row" spacing={2} alignItems="center">
           <TextField
@@ -211,7 +231,6 @@ export default function OrdersPage() {
         </Stack>
       </Paper>
 
-      {/* 트랜잭션 테이블 */}
       <Paper 
         elevation={0}
         sx={{
@@ -240,9 +259,11 @@ export default function OrdersPage() {
                 <TableCell sx={{ color: isDark ? 'rgb(209, 213, 219)' : 'inherit' }}>시간</TableCell>
                 <TableCell sx={{ color: isDark ? 'rgb(209, 213, 219)' : 'inherit' }}>풀</TableCell>
                 <TableCell sx={{ color: isDark ? 'rgb(209, 213, 219)' : 'inherit' }}>유형</TableCell>
-                <TableCell sx={{ color: isDark ? 'rgb(209, 213, 219)' : 'inherit' }}>방향</TableCell>
-                <TableCell sx={{ color: isDark ? 'rgb(209, 213, 219)' : 'inherit' }}>수량</TableCell>
+                <TableCell sx={{ color: isDark ? 'rgb(209, 213, 219)' : 'inherit' }}>토큰 A 수량</TableCell>
+                <TableCell sx={{ color: isDark ? 'rgb(209, 213, 219)' : 'inherit' }}>토큰 B 수량</TableCell>
                 <TableCell sx={{ color: isDark ? 'rgb(209, 213, 219)' : 'inherit' }}>가격</TableCell>
+                <TableCell sx={{ color: isDark ? 'rgb(209, 213, 219)' : 'inherit' }}>가격 영향</TableCell>
+                <TableCell sx={{ color: isDark ? 'rgb(209, 213, 219)' : 'inherit' }}>수수료</TableCell>
                 <TableCell sx={{ color: isDark ? 'rgb(209, 213, 219)' : 'inherit' }}>가스비용</TableCell>
                 <TableCell sx={{ color: isDark ? 'rgb(209, 213, 219)' : 'inherit' }}>상태</TableCell>
                 <TableCell sx={{ color: isDark ? 'rgb(209, 213, 219)' : 'inherit' }}>TX</TableCell>
@@ -259,26 +280,26 @@ export default function OrdersPage() {
                   </TableCell>
                   <TableCell>
                     <Chip 
-                      label={tx.action_type}
+                      label={getActionTypeLabel(tx.action_type)}
                       size="small"
-                      sx={{
-                        bgcolor: isDark ? 'rgba(59, 130, 246, 0.1)' : 'rgba(59, 130, 246, 0.1)',
-                        color: isDark ? 'rgb(96, 165, 250)' : 'rgb(59, 130, 246)',
-                        borderRadius: 1
-                      }}
+                      color={getActionTypeColor(tx.action_type)}
+                      sx={{ borderRadius: 1 }}
                     />
                   </TableCell>
-                  <TableCell>
-                    <Box display="flex" alignItems="center" gap={1}>
-                      <DirectionIcon direction={tx.direction} />
-                      {tx.direction}
-                    </Box>
+                  <TableCell sx={{ color: isDark ? 'rgb(243, 244, 246)' : 'inherit' }}>
+                    {formatNumber(tx.token_a_amount)}
                   </TableCell>
                   <TableCell sx={{ color: isDark ? 'rgb(243, 244, 246)' : 'inherit' }}>
-                    {formatNumber(tx.amount)}
+                    {formatNumber(tx.token_b_amount)}
                   </TableCell>
                   <TableCell sx={{ color: isDark ? 'rgb(243, 244, 246)' : 'inherit' }}>
-                    {formatNumber(tx.price)}
+                    ${formatNumber(tx.price)}
+                  </TableCell>
+                  <TableCell sx={{ color: isDark ? 'rgb(243, 244, 246)' : 'inherit' }}>
+                    {tx.price_impact ? `${formatNumber(tx.price_impact)}%` : '-'}
+                  </TableCell>
+                  <TableCell sx={{ color: isDark ? 'rgb(243, 244, 246)' : 'inherit' }}>
+                    ${formatNumber(tx.fee_amount)}
                   </TableCell>
                   <TableCell sx={{ color: isDark ? 'rgb(243, 244, 246)' : 'inherit' }}>
                     {formatNumber(tx.gas_used)} SOL
@@ -311,7 +332,6 @@ export default function OrdersPage() {
           </Table>
         </TableContainer>
 
-        {/* 페이지네이션 */}
         <TablePagination
           component="div"
           count={pagination.total}

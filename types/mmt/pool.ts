@@ -2,14 +2,6 @@
 
 import { PublicKey } from '@solana/web3.js';
 
-export interface TokenInfo {
-  address: string;
-  symbol: string;
-  name: string;
-  decimals: number;
-  logoURI?: string;
-}
-
 export interface PoolConfig {
   bidSpread: number;
   askSpread: number;
@@ -70,4 +62,28 @@ export interface PoolKeys {
   ammId: PublicKey;
   authority: PublicKey;
   program: PublicKey;
+}
+
+export interface TokenInfo {
+  address: string;
+  symbol: string;
+  name: string;
+  decimals: number;
+  logoURI?: string | null;
+  supply?: string;
+}
+
+export interface PoolInfo {
+  poolAddress: string;
+  tokenA: TokenInfo;
+  tokenB: TokenInfo;
+  fees: {
+    feeRate: number;
+    apy: number;
+  };
+  status: 'ACTIVE' | 'PAUSED' | 'INACTIVE';
+  lastPrice: string;
+  volume24h: string;
+  liquidityUsd: string;
+  updatedAt: Date;
 }

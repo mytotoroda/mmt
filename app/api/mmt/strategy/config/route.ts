@@ -27,8 +27,10 @@ export async function GET(request: NextRequest) {
         bid_adjustment,
         ask_adjustment,
         check_interval,
-        min_trade_size,
-        max_trade_size,
+        min_token_a_trade,
+        max_token_a_trade,
+        min_token_b_trade,
+        max_token_b_trade,
         trade_size_percentage,
         target_ratio,
         rebalance_threshold,
@@ -36,27 +38,33 @@ export async function GET(request: NextRequest) {
         max_slippage,
         stop_loss_percentage,
         emergency_stop,
-        enabled
+        enabled,
+        min_liquidity,
+        max_liquidity
       FROM mmt_pool_configs 
       WHERE pool_id = ?
     `, [poolId]);
 
     // 설정이 없는 경우 기본값 반환
     const config = configs[0] || {
-      base_spread: 0.001,
+      base_spread: 0.002, // 0.2%
       bid_adjustment: -0.0005,
       ask_adjustment: 0.0005,
       check_interval: 30,
-      min_trade_size: 100,
-      max_trade_size: 10000,
-      trade_size_percentage: 0.05,
+      min_token_a_trade: 0.1,
+      max_token_a_trade: 10,
+      min_token_b_trade: 1,
+      max_token_b_trade: 1000,
+      trade_size_percentage: 0.1, // 10%
       target_ratio: 0.5,
-      rebalance_threshold: 0.05,
+      rebalance_threshold: 0.1, // 10%
       max_position_size: 50000,
       max_slippage: 0.01,
       stop_loss_percentage: 0.05,
-      emergency_stop: false,
-      enabled: false
+      emergency_stop: 0,
+      enabled: 0,
+      min_liquidity: 1000,
+      max_liquidity: 1000000
     };
 
     return NextResponse.json({
@@ -66,16 +74,20 @@ export async function GET(request: NextRequest) {
         bidAdjustment: config.bid_adjustment * 100,
         askAdjustment: config.ask_adjustment * 100,
         checkInterval: config.check_interval,
-        minTradeSize: config.min_trade_size,
-        maxTradeSize: config.max_trade_size,
+        minTokenATrade: config.min_token_a_trade,
+        maxTokenATrade: config.max_token_a_trade,
+        minTokenBTrade: config.min_token_b_trade,
+        maxTokenBTrade: config.max_token_b_trade,
         tradeSizePercentage: config.trade_size_percentage * 100,
-        targetRatio: config.target_ratio,
+        targetRatio: config.target_ratio * 100,
         rebalanceThreshold: config.rebalance_threshold * 100,
         maxPositionSize: config.max_position_size,
         maxSlippage: config.max_slippage * 100,
         stopLossPercentage: config.stop_loss_percentage * 100,
-        emergencyStop: config.emergency_stop,
-        enabled: config.enabled
+        emergencyStop: Boolean(config.emergency_stop),
+        enabled: Boolean(config.enabled),
+        minLiquidity: config.min_liquidity,
+        maxLiquidity: config.max_liquidity
       }
     });
 
@@ -102,8 +114,10 @@ export async function POST(request: NextRequest) {
       bidAdjustment,
       askAdjustment,
       checkInterval,
-      minTradeSize,
-      maxTradeSize,
+      minTokenATrade,
+      maxTokenATrade,
+      minTokenBTrade,
+      maxTokenBTrade,
       tradeSizePercentage,
       targetRatio,
       rebalanceThreshold,
@@ -112,7 +126,9 @@ export async function POST(request: NextRequest) {
       stopLossPercentage,
       emergencyStop,
       enabled,
-      walletAddress // 설정 변경자 지갑 주소
+      minLiquidity,
+      maxLiquidity,
+      walletAddress
     } = data;
 
     if (!poolId) {
@@ -140,8 +156,10 @@ export async function POST(request: NextRequest) {
           bid_adjustment,
           ask_adjustment,
           check_interval,
-          min_trade_size,
-          max_trade_size,
+          min_token_a_trade,
+          max_token_a_trade,
+          min_token_b_trade,
+          max_token_b_trade,
           trade_size_percentage,
           target_ratio,
           rebalance_threshold,
@@ -149,15 +167,19 @@ export async function POST(request: NextRequest) {
           max_slippage,
           stop_loss_percentage,
           emergency_stop,
-          enabled
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          enabled,
+          min_liquidity,
+          max_liquidity
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
           base_spread = VALUES(base_spread),
           bid_adjustment = VALUES(bid_adjustment),
           ask_adjustment = VALUES(ask_adjustment),
           check_interval = VALUES(check_interval),
-          min_trade_size = VALUES(min_trade_size),
-          max_trade_size = VALUES(max_trade_size),
+          min_token_a_trade = VALUES(min_token_a_trade),
+          max_token_a_trade = VALUES(max_token_a_trade),
+          min_token_b_trade = VALUES(min_token_b_trade),
+          max_token_b_trade = VALUES(max_token_b_trade),
           trade_size_percentage = VALUES(trade_size_percentage),
           target_ratio = VALUES(target_ratio),
           rebalance_threshold = VALUES(rebalance_threshold),
@@ -165,23 +187,29 @@ export async function POST(request: NextRequest) {
           max_slippage = VALUES(max_slippage),
           stop_loss_percentage = VALUES(stop_loss_percentage),
           emergency_stop = VALUES(emergency_stop),
-          enabled = VALUES(enabled)
+          enabled = VALUES(enabled),
+          min_liquidity = VALUES(min_liquidity),
+          max_liquidity = VALUES(max_liquidity)
       `, [
         poolId,
         baseSpread / 100,
         bidAdjustment / 100,
         askAdjustment / 100,
         checkInterval,
-        minTradeSize,
-        maxTradeSize,
+        minTokenATrade,
+        maxTokenATrade,
+        minTokenBTrade,
+        maxTokenBTrade,
         tradeSizePercentage / 100,
-        targetRatio,
+        targetRatio / 100,
         rebalanceThreshold / 100,
         maxPositionSize,
         maxSlippage / 100,
         stopLossPercentage / 100,
-        emergencyStop,
-        enabled
+        emergencyStop ? 1 : 0,
+        enabled ? 1 : 0,
+        minLiquidity,
+        maxLiquidity
       ]);
 
       // 변경 이력 기록

@@ -54,12 +54,7 @@ const allTabs = [
     icon: BarChart2,
     description: '토큰 포지션 및 수익률 분석'
   },
-  { 
-    label: '내역', 
-    path: '/mmt/history',
-    icon: History,
-    description: '거래 내역 및 성과 분석'
-  },
+
   { 
     label: '지갑 관리', 
     path: '/mmt/wallets',
@@ -71,6 +66,12 @@ const allTabs = [
     path: '/mmt/settings',
     icon: Settings,
     description: '시스템 설정 및 환경 설정'
+  },
+  {
+  label: '성과 분석',
+  path: '/mmt/performance',
+  icon: BarChart2,
+  description: '포지션 성과 분석 및 리밸런싱 효과'
   },
 ];
 

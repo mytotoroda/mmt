@@ -1,179 +1,167 @@
 // app/amm/page.tsx
 'use client';
 
-import React from 'react';
-import { 
-  Container, 
-  Grid, 
-  Typography, 
-  Box, 
-  Paper,
-  useTheme 
-} from '@mui/material';
-import SwapCard from '@/components/amm/SwapCard';
-import { useAMM } from '@/contexts/AMMContext';
+import { useTheme } from '@mui/material/styles';
+import { Box, Paper, Typography, Alert } from '@mui/material';
+import SwapInterface from '@/components/mmt/raydium/SwapInterface';
+import { useWallet } from '@/contexts/WalletContext';
+import dynamic from 'next/dynamic';
 
-export default function AMMPage() {
-  const { pools, loading } = useAMM();
+const PriceChart = dynamic(
+  () => import('@/components/mmt/raydium/PriceChart'),
+  { ssr: false }
+);
+
+export default function AmmPage() {
   const theme = useTheme();
-
-  const paperStyle = {
-    height: '100%',
-    p: 3,
-    bgcolor: 'background.paper',
-    borderRadius: 2,
-    border: 1,
-    borderColor: 'divider',
-  };
-
-  const statBoxStyle = {
-    p: 2,
-    textAlign: 'center',
-    bgcolor: 'background.default',
-    borderRadius: 2,
-    border: 1,
-    borderColor: theme.palette.divider,
-  };
+  const { publicKey } = useWallet();
 
   return (
-    <Box sx={{
-      bgcolor: 'background.default',
-      minHeight: '100%',
-      py: 3
-    }}>
-      <Container maxWidth="lg">
-        {/* Header Section */}
-        <Box sx={{ mb: 4, textAlign: 'center' }}>
-          <Typography 
-            variant="h5"
-            component="h1" 
-            sx={{ 
-              mb: 2,
-              fontWeight: 600,
-              color: 'text.primary',
-              fontSize: { xs: '1.5rem', md: '1.75rem' }
-            }}
-          >
-            토큰 스왑
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+      {/* 네트워크 경고 배너 */}
+      {process.env.NEXT_PUBLIC_NETWORK !== 'mainnet-beta' && (
+        <Alert 
+          severity="warning" 
+          sx={{ 
+            borderRadius: 0,
+            justifyContent: 'center',
+          }}
+        >
+          You are currently connected to Devnet. This is a test environment.
+        </Alert>
+      )}
+
+      <div className="container mx-auto px-4 py-6">
+        {/* 페이지 헤더 */}
+        <div className="mb-8">
+          <Typography variant="h4" className="text-center mb-2">
+            Raydium Swap
           </Typography>
           <Typography 
-            variant="subtitle1"
+            variant="body1" 
+            color="textSecondary" 
+            className="text-center"
+          >
+            Swap tokens instantly with the best rates
+          </Typography>
+        </div>
+
+        {/* 메인 컨텐츠 그리드 */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          {/* 왼쪽: 스왑 인터페이스 */}
+          <div className="lg:col-span-7">
+            <Box sx={{ 
+              maxWidth: '100%',
+              mx: 'auto'
+            }}>
+              <SwapInterface />
+            </Box>
+          </div>
+
+          {/* 오른쪽: 차트 섹션 */}
+          <div className="lg:col-span-5">
+            <Paper 
+              sx={{ 
+                height: '400px',
+                p: 2,
+                bgcolor: theme.palette.background.paper,
+                display: { xs: 'none', lg: 'block' }
+              }}
+            >
+              <PriceChart />
+            </Paper>
+          </div>
+        </div>
+
+        {/* 추가 정보 섹션 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
+          {/* 거래 통계 */}
+          <Paper 
             sx={{ 
-              color: 'text.secondary',
-              fontSize: { xs: '0.875rem', md: '1rem' }
+              p: 3,
+              bgcolor: theme.palette.background.paper
             }}
           >
-            Solana 네트워크에서 토큰을 빠르고 효율적으로 교환하세요
-          </Typography>
-        </Box>
+            <Typography variant="h6" gutterBottom>
+              Trading Statistics
+            </Typography>
+            <Box sx={{ mt: 2 }}>
+              <div className="flex justify-between mb-2">
+                <Typography color="textSecondary">24h Volume</Typography>
+                <Typography>$--,---,---</Typography>
+              </div>
+              <div className="flex justify-between mb-2">
+                <Typography color="textSecondary">Total Pairs</Typography>
+                <Typography>---</Typography>
+              </div>
+              <div className="flex justify-between">
+                <Typography color="textSecondary">Total Trades</Typography>
+                <Typography>--,---</Typography>
+              </div>
+            </Box>
+          </Paper>
 
-        {/* Main Content */}
-        <Grid container spacing={3}>
-          {/* Swap Card Section */}
-          <Grid item xs={12} md={6}>
-            <Paper elevation={0} sx={paperStyle}>
-              <SwapCard />
-            </Paper>
-          </Grid>
+          {/* 유동성 정보 */}
+          <Paper 
+            sx={{ 
+              p: 3,
+              bgcolor: theme.palette.background.paper
+            }}
+          >
+            <Typography variant="h6" gutterBottom>
+              Liquidity Info
+            </Typography>
+            <Box sx={{ mt: 2 }}>
+              <div className="flex justify-between mb-2">
+                <Typography color="textSecondary">Total Value Locked</Typography>
+                <Typography>$--,---,---</Typography>
+              </div>
+              <div className="flex justify-between mb-2">
+                <Typography color="textSecondary">Number of Pools</Typography>
+                <Typography>---</Typography>
+              </div>
+              <div className="flex justify-between">
+                <Typography color="textSecondary">Active Pools</Typography>
+                <Typography>---</Typography>
+              </div>
+            </Box>
+          </Paper>
 
-          {/* Stats Section */}
-          <Grid item xs={12} md={6}>
-            <Paper elevation={0} sx={paperStyle}>
-              <Typography 
-                variant="h6"
-                sx={{ 
-                  mb: 3,
-                  fontWeight: 600,
-                  color: 'text.primary',
-                  fontSize: '1.125rem'
-                }}
-              >
-                거래 통계
-              </Typography>
-              
-              <Grid container spacing={2}>
-                <Grid item xs={6}>
-                  <Box sx={statBoxStyle}>
-                    <Typography 
-                      variant="body2"
-                      sx={{ 
-                        mb: 1,
-                        color: 'text.secondary',
-                        fontWeight: 500,
-                        fontSize: '0.813rem'
-                      }}
-                    >
-                      활성 풀
-                    </Typography>
-                    <Typography 
-                      variant="h6"
-                      sx={{ 
-                        fontWeight: 700,
-                        color: 'primary.main',
-                        fontSize: '1.25rem'
-                      }}
-                    >
-                      {pools.length}
-                    </Typography>
-                  </Box>
-                </Grid>
-
-                <Grid item xs={6}>
-                  <Box sx={statBoxStyle}>
-                    <Typography 
-                      variant="body2"
-                      sx={{ 
-                        mb: 1,
-                        color: 'text.secondary',
-                        fontWeight: 500,
-                        fontSize: '0.813rem'
-                      }}
-                    >
-                      24시간 거래량
-                    </Typography>
-                    <Typography 
-                      variant="h6"
-                      sx={{ 
-                        fontWeight: 700,
-                        color: 'primary.main',
-                        fontSize: '1.25rem'
-                      }}
-                    >
-                      $0.00
-                    </Typography>
-                  </Box>
-                </Grid>
-
-                <Grid item xs={12}>
-                  <Box sx={statBoxStyle}>
-                    <Typography 
-                      variant="body2"
-                      sx={{ 
-                        mb: 1,
-                        color: 'text.secondary',
-                        fontWeight: 500,
-                        fontSize: '0.813rem'
-                      }}
-                    >
-                      네트워크
-                    </Typography>
-                    <Typography 
-                      variant="h6"
-                      sx={{ 
-                        fontWeight: 700,
-                        color: 'primary.main',
-                        fontSize: '1.25rem'
-                      }}
-                    >
-                      {process.env.NEXT_PUBLIC_NETWORK === 'mainnet-beta' ? 'Mainnet' : 'Devnet'}
-                    </Typography>
-                  </Box>
-                </Grid>
-              </Grid>
-            </Paper>
-          </Grid>
-        </Grid>
-      </Container>
-    </Box>
+          {/* 사용자 정보 */}
+          <Paper 
+            sx={{ 
+              p: 3,
+              bgcolor: theme.palette.background.paper
+            }}
+          >
+            <Typography variant="h6" gutterBottom>
+              Your Information
+            </Typography>
+            <Box sx={{ mt: 2 }}>
+              {publicKey ? (
+                <>
+                  <div className="flex justify-between mb-2">
+                    <Typography color="textSecondary">Wallet</Typography>
+                    <Typography>{`${publicKey.slice(0, 4)}...${publicKey.slice(-4)}`}</Typography>
+                  </div>
+                  <div className="flex justify-between mb-2">
+                    <Typography color="textSecondary">Your Trades</Typography>
+                    <Typography>--</Typography>
+                  </div>
+                  <div className="flex justify-between">
+                    <Typography color="textSecondary">Active Positions</Typography>
+                    <Typography>--</Typography>
+                  </div>
+                </>
+              ) : (
+                <Typography color="textSecondary" align="center">
+                  Connect wallet to view your information
+                </Typography>
+              )}
+            </Box>
+          </Paper>
+        </div>
+      </div>
+    </div>
   );
 }

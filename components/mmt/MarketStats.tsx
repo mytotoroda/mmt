@@ -1,3 +1,4 @@
+// components/mmt/MarketStats.tsx
 import React, { useState, useEffect } from 'react';
 import { 
   Box, 
@@ -15,10 +16,7 @@ import {
   ArrowUpRight,
   ArrowDownRight
 } from 'lucide-react';
-
-interface MarketStatsProps {
-  tokenPair: string;
-}
+import { useMMT } from '@/contexts/mmt/MMTContext';
 
 interface MarketData {
   lastPrice: number;
@@ -31,33 +29,68 @@ interface MarketData {
   updatedAt: string;
 }
 
-const MarketStats: React.FC<MarketStatsProps> = ({ tokenPair }) => {
+// 로깅 유틸리티
+const logStep = (step: string, data?: any) => {
+  console.log('\n--------------------');
+  console.log(`[MarketStats] ${step}`);
+  if (data) {
+    console.log(JSON.stringify(data, null, 2));
+  }
+  console.log('--------------------\n');
+};
+
+export default function MarketStats() {
   const theme = useTheme();
+  const { selectedPool } = useMMT();
   const [marketData, setMarketData] = useState<MarketData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (tokenPair) {
+    if (selectedPool?.pool_id) {
       fetchMarketData();
-      const interval = setInterval(fetchMarketData, 30000); // 30초마다 업데이트
+      const interval = setInterval(fetchMarketData, 300000); // 30초마다 업데이트
       
       return () => clearInterval(interval);
     }
-  }, [tokenPair]);
+  }, [selectedPool]);
 
   const fetchMarketData = async () => {
-    try {
-      const response = await fetch(`/api/mmt/stats?tokenPair=${tokenPair}`);
-      if (response.ok) {
-        const data = await response.json();
-        setMarketData(data);
-      }
-    } catch (error) {
-      console.error('Failed to fetch market stats:', error);
-    } finally {
-      setLoading(false);
+  if (!selectedPool) return;
+
+  try {
+    //logStep('Fetching market data', { poolId: selectedPool.pool_id });
+    setLoading(true);
+    
+    const response = await fetch(`/api/mmt/stats/${selectedPool.pool_id}`);
+    if (!response.ok) {
+      throw new Error('Failed to fetch market stats');
     }
-  };
+
+    const data = await response.json();
+    //logStep('Received data', data);
+
+    if (data.success) {
+      setMarketData({
+        lastPrice: parseFloat(data.data.lastPrice),
+        priceChange24h: parseFloat(data.data.priceChange24h),
+        priceChangePercent24h: parseFloat(data.data.priceChangePercent24h),
+        high24h: parseFloat(data.data.high24h),
+        low24h: parseFloat(data.data.low24h),
+        volume24h: parseFloat(data.data.volume24h),
+        marketCap: parseFloat(data.data.marketCap),
+        updatedAt: data.data.updatedAt
+      });
+      //logStep('Market data updated', marketData);
+    } else {
+      throw new Error(data.message || 'Failed to fetch market stats');
+    }
+  } catch (error) {
+    console.error('Failed to fetch market stats:', error);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   const formatNumber = (num: number, options?: Intl.NumberFormatOptions) => {
     return new Intl.NumberFormat('en-US', {
@@ -80,7 +113,7 @@ const MarketStats: React.FC<MarketStatsProps> = ({ tokenPair }) => {
 
   const renderStatCard = (
     title: string, 
-    value: string | number, 
+    value: string | number | React.ReactNode, 
     icon: React.ReactNode, 
     color?: string
   ) => (
@@ -126,7 +159,7 @@ const MarketStats: React.FC<MarketStatsProps> = ({ tokenPair }) => {
     </Paper>
   );
 
-  if (!tokenPair) {
+  if (!selectedPool) {
     return (
       <Box sx={{ 
         height: '100%', 
@@ -135,7 +168,7 @@ const MarketStats: React.FC<MarketStatsProps> = ({ tokenPair }) => {
         justifyContent: 'center' 
       }}>
         <Typography color="text.secondary">
-          Please select a token pair
+          Please select a pool to view market stats
         </Typography>
       </Box>
     );
@@ -172,12 +205,12 @@ const MarketStats: React.FC<MarketStatsProps> = ({ tokenPair }) => {
       }}>
         <TrendingUp size={20} />
         <Typography variant="h6" component="h2" sx={{ color: 'text.primary' }}>
-          Market Stats
+          {`${selectedPool.tokenA.symbol}/${selectedPool.tokenB.symbol} Stats`}
         </Typography>
       </Box>
 
       <Grid container spacing={2} sx={{ flex: 1 }}>
-        <Grid item xs={12} sm={6}>
+       <Grid item xs={12} sm={6}>
           {renderStatCard(
             "Last Price",
             <>
@@ -271,6 +304,4 @@ const MarketStats: React.FC<MarketStatsProps> = ({ tokenPair }) => {
       </Box>
     </Box>
   );
-};
-
-export default MarketStats;
+}
