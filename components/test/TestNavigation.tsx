@@ -1,3 +1,4 @@
+// components/test/TestNavigation.tsx
 'use client';
 
 import React from 'react';
@@ -7,72 +8,58 @@ import {
   Tab, 
   Container,
   useTheme,
-  alpha,
+  alpha
 } from '@mui/material';
 import { useRouter, usePathname } from 'next/navigation';
 import { useTheme as useNextTheme } from 'next-themes';
 import {
-  Repeat,
-  Droplets,
-  Coins,
-  Database,
+  LineChart,
+  Settings2,
   History,
-  ArrowLeftRight,
+  BarChart2,
+  Wallet,
+  Settings,
   ListFilter,
-  Settings
+  Droplets
 } from 'lucide-react';
+
 const allTabs = [
   { 
-    label: '토큰 스왑', 
-    path: '/amm',
-    icon: Repeat,
-    description: '토큰 교환 및 거래'
+    label: 'Get Pool Info by ID', 
+    path: '/test/getpool',
+    icon: LineChart,
+    description: 'Get Pool Info by ID'
   },
   { 
-    label: '유동성 풀', 
-    path: '/amm/pools',
+    label: 'Get Pool id by Coin address', 
+    path: '/test/getpoolid',
     icon: Droplets,
-    description: '유동성 풀 현황 및 참여'
+    description: 'Get Pool id by Coin address'
   },
-  { 
-    label: '토큰 관리', 
-    path: '/amm/admin/tokens',
-    icon: Coins,
-    description: '토큰 관리 및 설정'
-  },
-  { 
-    label: '풀 관리', 
-    path: '/amm/admin/pools',
-    icon: Database,
-    description: '유동성 풀 관리'
-  },
-  { 
-    label: '트랜잭션', 
-    path: '/amm/admin/transactions',
-    icon: History,
-    description: '거래 내역 조회'
-  }
 ];
 
-export default function AMMNavigation() {
+export default function TestNavigation() {
   const router = useRouter();
   const pathname = usePathname();
+  const muiTheme = useTheme();
   const { resolvedTheme } = useNextTheme();
   const isDarkMode = resolvedTheme === 'dark';
 
+  // 수정된 getActiveTab 함수
   const getActiveTab = () => {
+    // 정확한 경로 매칭을 위해 끝에 있는 슬래시 제거
     const normalizedPathname = pathname?.endsWith('/') 
       ? pathname.slice(0, -1) 
       : pathname;
 
     const index = allTabs.findIndex(tab => {
-      if (tab.path === '/amm') {
-        return normalizedPathname === '/amm';
+      if (tab.path === '/mmt') {
+        return normalizedPathname === '/mmt';
       }
       return normalizedPathname === tab.path;
     });
 
-    return index === -1 ? 0 : index;
+    return index === -1 ? 0 : index; // 매칭되는 탭이 없으면 대시보드 선택
   };
 
   return (

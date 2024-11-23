@@ -1,17 +1,73 @@
-// 4-2. lib/mmt/constants.ts - 상수 정의
-export const DEFAULT_STRATEGY_CONFIG: MarketMakingStrategy = {
-  baseSpread: 0.1,
-  bidAdjustment: -0.05,
-  askAdjustment: 0.05,
-  checkInterval: 30,
-  minTradeSize: 100,
-  maxTradeSize: 10000,
-  tradeSizePercentage: 5,
-  targetRatio: 0.5,
-  rebalanceThreshold: 5.0,
-  maxPositionSize: 50000,
-  maxSlippage: 1.0,
-  stopLossPercentage: 5.0,
-  emergencyStop: false,
-  enabled: false
+// lib/mmt/constants.ts
+
+export type NetworkType = 'mainnet-beta' | 'devnet';
+
+export interface NetworkConstants {
+  POOLS: Record<string, string>;
+  TOKENS: Record<string, {
+    address: string;
+    symbol: string;
+    name: string;
+    decimals: number;
+  }>;
+}
+
+export const NETWORK_CONSTANTS: Record<NetworkType, NetworkConstants> = {
+  'mainnet-beta': {
+    POOLS: {
+      'SOL-USDC': '58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2',
+      'USDC-SOL': '58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2',
+      'RAY-SOL': 'AVs9TA4nWDzfPJE9gGVNJMVhcQy3V9PGazuz33BfG2RA',
+      'RAY-USDC': '6UmmUiYoBjSrhakAobJw8BvkmJtDVxaeBtbt7rxWo1mg'
+    },
+    TOKENS: {
+      SOL: {
+        address: 'So11111111111111111111111111111111111111112',
+        symbol: 'SOL',
+        name: 'Solana',
+        decimals: 9
+      },
+      USDC: {
+        address: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',
+        symbol: 'USDC',
+        name: 'USD Coin',
+        decimals: 6
+      },
+      RAY: {
+        address: '4k3Dyjzvzp8eMZWUXbBCjEvwSkkk59S5iCNLY3QrkX6R',
+        symbol: 'RAY',
+        name: 'Raydium',
+        decimals: 6
+      }
+    }
+  },
+  'devnet': {
+    POOLS: {
+      'SOL-USDC': 'HJPjoWUrhoZzkNfRpHuieeFk9WcZWjwy6PBjZ81ngndJ',
+      'USDC-SOL': 'HJPjoWUrhoZzkNfRpHuieeFk9WcZWjwy6PBjZ81ngndJ',
+    },
+    TOKENS: {
+      SOL: {
+        address: 'So11111111111111111111111111111111111111112',
+        symbol: 'SOL',
+        name: 'Solana',
+        decimals: 9
+      },
+      USDC: {
+        address: 'Gh9ZwEmdLJ8DscKNTkTqPbNwLNNBjuSzaG9Vp2KGtKJr',
+        symbol: 'USDC',
+        name: 'USD Coin',
+        decimals: 6
+      }
+    }
+  }
 };
+
+export function getNetwork(): NetworkType {
+  return (process.env.NEXT_PUBLIC_NETWORK as NetworkType) || 'devnet';
+}
+
+export function getNetworkConstants(): NetworkConstants {
+  const network = getNetwork();
+  return NETWORK_CONSTANTS[network];
+}

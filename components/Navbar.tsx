@@ -221,6 +221,12 @@ return (
         >
           컨트렉트등록
         </Link>
+	<Link 
+          href="/test/getpool" 
+          className="text-gray-700 dark:text-gray-300 hover:text-blue-500 dark:hover:text-blue-400 transition-colors duration-200 text-sm font-medium"
+        >
+          Test
+        </Link>
       </div>
     </div>
   </nav>

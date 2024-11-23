@@ -1,29 +1,39 @@
 // lib/mmt/services/swapService.ts
-import { TokenInfo } from '@/types/mmt/pool';
-import { RaydiumService } from '../raydium';
-import { PublicKey } from '@solana/web3.js';
-import BN from 'bn.js';
-import Decimal from 'decimal.js';
-import { NATIVE_MINT } from '@solana/spl-token';
+
 import { 
+  Raydium,
   ApiV3PoolInfoStandardItem, 
   AmmV4Keys,
   ApiPoolInfo,
-  RpcPoolInfo
+  ComputeBudgetConfig,
+  AmmRpcData,
+  ApiPoolInfoItem,
+  AMM_V4,
+  AMM_STABLE,
+  DEVNET_PROGRAM_ID
 } from '@raydium-io/raydium-sdk-v2';
+import { Connection, PublicKey } from '@solana/web3.js';
+import { TokenInfo } from '@/types/mmt/pool';
+import { RaydiumService } from '../raydium';
+import { NATIVE_MINT } from '@solana/spl-token';
+import { RAYDIUM_POOLS, SUPPORTED_TOKENS } from '../constants/raydium';
+import BN from 'bn.js';
+import Decimal from 'decimal.js';
 
-// Known Pool IDs
-const KNOWN_POOLS = {
-  'RAY-SOL': 'AVs9TA4nWDzfPJE9gGVNJMVhcQy3V9PGazuz33BfG2RA',
-  'RAY-USDC': '6UmmUiYoBjSrhakAobJw8BvkmJtDVxaeBtbt7rxWo1mg',
-  'SOL-USDC': '58oQChx4yWmvKdwLLZzBi4ChoCc2fqCUWBkwMihLYQo2'
-};
+// 유효한 프로그램 ID 리스트
+const VALID_PROGRAM_IDS = new Set([
+  AMM_V4.toBase58(),
+  AMM_STABLE.toBase58(),
+  DEVNET_PROGRAM_ID.AmmV4.toBase58(),
+  DEVNET_PROGRAM_ID.AmmStable.toBase58(),
+]);
 
 export interface SwapQuote {
+  amountIn: string;
   amountOut: string;
   minAmountOut: string;
   priceImpact: number;
-  poolPrice?: string;
+  executionPrice: string;
   fee?: string;
   route?: {
     poolId: string;
@@ -32,78 +42,139 @@ export interface SwapQuote {
   };
 }
 
+export interface SwapParams {
+  tokenIn: TokenInfo;
+  tokenOut: TokenInfo;
+  amountIn: string;
+  slippage?: number;
+  wallet?: string;
+}
+
+export interface SwapResult {
+  txId: string;
+  amountIn: string;
+  amountOut: string;
+  priceImpact: number;
+  fee: string;
+}
+
 export class SwapService {
   private raydium: RaydiumService;
+  private isMainnet: boolean;
 
   constructor(raydium: RaydiumService) {
     this.raydium = raydium;
+    this.isMainnet = process.env.NEXT_PUBLIC_NETWORK === 'mainnet-beta';
   }
 
-  async getSwapQuote(params: {
-    tokenIn: TokenInfo;
-    tokenOut: TokenInfo;
-    amountIn: string;
-    slippage?: number;
-  }): Promise<SwapQuote> {
+ async getSwapQuote(params: SwapParams): Promise<SwapQuote> {
+  try {
+    const sdk = await this.raydium.initializeSdk();
+    if (!sdk) throw new Error('SDK initialization failed');
+
+    // 토큰 주소 정규화
+    const tokenInAddress = this.normalizeTokenAddress(params.tokenIn.address);
+    const tokenOutAddress = this.normalizeTokenAddress(params.tokenOut.address);
+
+    // 풀 ID 찾기
+    const poolId = this.findPoolId(params.tokenIn.symbol, params.tokenOut.symbol);
+    if (!poolId) {
+      throw new Error(`No pool found for ${params.tokenIn.symbol}-${params.tokenOut.symbol}`);
+    }
+
+    console.log('Using pool:', poolId);
+
     try {
-      const sdk = await this.raydium.initializeSdk();
-      if (!sdk) throw new Error('Failed to initialize Raydium SDK');
-
-      // SOL 주소 정규화
-      const tokenInAddress = params.tokenIn.address === 'SOL' ? NATIVE_MINT.toString() : params.tokenIn.address;
-      const tokenOutAddress = params.tokenOut.address === 'SOL' ? NATIVE_MINT.toString() : params.tokenOut.address;
-
-      // 풀 ID 찾기
-      const poolId = await this.findPoolId(params.tokenIn.symbol, params.tokenOut.symbol);
-      if (!poolId) {
-        throw new Error(`No liquidity pool found for ${params.tokenIn.symbol}/${params.tokenOut.symbol}`);
-      }
-
-      console.log('Using pool:', poolId);
-
-      // RPC를 통해 풀 정보 가져오기
+      // 풀 정보 가져오기
       const poolInfos = await sdk.liquidity.getRpcPoolInfos([poolId]);
-      const poolInfo = poolInfos[poolId];
-
-      if (!poolInfo) {
-        throw new Error('Failed to fetch pool information from RPC');
+      if (!poolInfos || !poolInfos[poolId]) {
+        throw new Error(`Failed to fetch pool info for ${poolId}`);
       }
 
-      console.log('Pool price:', poolInfo.poolPrice);
+      const rpcInfo = poolInfos[poolId];
+      console.log('RPC Info:', {
+        baseReserve: rpcInfo.baseReserve?.toString() || 'N/A',
+        quoteReserve: rpcInfo.quoteReserve?.toString() || 'N/A',
+        status: rpcInfo.status?.toString() || 'N/A'
+      });
 
-      // 입력 금액을 적절한 데시멀로 변환
+      // Null 체크
+      if (!rpcInfo.baseReserve || !rpcInfo.quoteReserve || !rpcInfo.status) {
+        throw new Error('Invalid pool state: missing reserve or status information');
+      }
+
+      // 풀 키 가져오기
+      const poolKeys = await sdk.liquidity.getAmmPoolKeys(poolId);
+      console.log('Pool Keys:', poolKeys);
+
+      // 입력 금액 변환
+      const amountInDecimal = new Decimal(params.amountIn);
+      if (amountInDecimal.isNaN() || amountInDecimal.isZero()) {
+        throw new Error('Invalid input amount');
+      }
+
       const amountInBN = new BN(
-        new Decimal(params.amountIn)
+        amountInDecimal
           .mul(new Decimal(10).pow(params.tokenIn.decimals))
           .toFixed(0)
       );
 
-      // 스왑 계산
+      // 풀 정보 구성
+      const poolInfo = {
+        id: poolId,
+        baseMint: tokenInAddress,
+        quoteMint: tokenOutAddress,
+        baseReserve: rpcInfo.baseReserve,
+        quoteReserve: rpcInfo.quoteReserve,
+        status: rpcInfo.status.toNumber(),
+        version: 4
+      };
+
+      console.log('Computing amount out with pool info:', {
+        ...poolInfo,
+        baseReserve: poolInfo.baseReserve.toString(),
+        quoteReserve: poolInfo.quoteReserve.toString(),
+        status: poolInfo.status
+      });
+
+      // 견적 계산
       const out = sdk.liquidity.computeAmountOut({
-        poolInfo: {
-          id: poolId,
-          baseMint: tokenInAddress,
-          quoteMint: tokenOutAddress,
-          baseReserve: poolInfo.baseReserve,
-          quoteReserve: poolInfo.quoteReserve,
-          status: poolInfo.status.toNumber(),
-          version: 4
-        },
+        poolInfo,
         amountIn: amountInBN,
         currencyIn: tokenInAddress,
         currencyOut: tokenOutAddress,
         slippage: params.slippage || 0.01
       });
 
+      // 견적 결과 확인
+      if (!out.amountOut || !out.minAmountOut) {
+        throw new Error('Invalid computation result: missing output amounts');
+      }
+
+      console.log('Computation result:', {
+        amountOut: out.amountOut.toString(),
+        minAmountOut: out.minAmountOut.toString(),
+        priceImpact: out.priceImpact
+      });
+
+      // 실행 가격 계산
+      const amountOutDecimal = new Decimal(out.amountOut.toString())
+        .div(new Decimal(10).pow(params.tokenOut.decimals));
+      
+      const executionPrice = this.calculateExecutionPrice(
+        amountInDecimal,
+        amountOutDecimal
+      );
+
       return {
-        amountOut: new Decimal(out.amountOut.toString())
-          .div(new Decimal(10).pow(params.tokenOut.decimals))
-          .toString(),
+        amountIn: params.amountIn,
+        amountOut: amountOutDecimal.toString(),
         minAmountOut: new Decimal(out.minAmountOut.toString())
           .div(new Decimal(10).pow(params.tokenOut.decimals))
           .toString(),
-        priceImpact: parseFloat(out.priceImpact.toString()),
-        poolPrice: poolInfo.poolPrice.toString(),
+        priceImpact: out.priceImpact || 0,
+        executionPrice,
+        fee: out.fee?.toString() || '0',
         route: {
           poolId,
           tokenASymbol: params.tokenIn.symbol,
@@ -112,36 +183,144 @@ export class SwapService {
       };
 
     } catch (error) {
-      console.error('Swap quote error:', error);
-      throw new Error(error instanceof Error ? error.message : 'Failed to get swap quote');
+      console.error('Error computing swap:', error);
+      throw error;
     }
-  }
 
-  private async findPoolId(tokenASymbol: string, tokenBSymbol: string): Promise<string | null> {
-    // 먼저 알려진 풀에서 검색
-    const poolKey = `${tokenASymbol}-${tokenBSymbol}`;
-    const reversePoolKey = `${tokenBSymbol}-${tokenASymbol}`;
-    
-    if (KNOWN_POOLS[poolKey]) return KNOWN_POOLS[poolKey];
-    if (KNOWN_POOLS[reversePoolKey]) return KNOWN_POOLS[reversePoolKey];
-
-    try {
-      // 알려진 풀에 없다면 API에서 검색
-      const response = await fetch('https://api.raydium.io/v2/main/pairs');
-      if (!response.ok) {
-        throw new Error('Failed to fetch pools from API');
-      }
-
-      const pairs = await response.json();
-      const pair = pairs.find((p: any) => 
-        (p.name === poolKey || p.name === reversePoolKey)
-      );
-
-      return pair ? pair.ammId : null;
-
-    } catch (error) {
-      console.error('Error finding pool:', error);
-      return null;
+  } catch (error) {
+    console.error('Swap quote error:', error);
+    if (error instanceof Error) {
+      throw error;
     }
+    throw new Error('Failed to get swap quote');
   }
 }
+
+private findPoolId(tokenASymbol: string, tokenBSymbol: string): string {
+  const pairKey = `${tokenASymbol}-${tokenBSymbol}`;
+  const reversePairKey = `${tokenBSymbol}-${tokenASymbol}`;
+  
+  console.log('Looking for pool:', { pairKey, reversePairKey });
+  console.log('Available pools:', RAYDIUM_POOLS);
+
+  const pool = RAYDIUM_POOLS[pairKey] || RAYDIUM_POOLS[reversePairKey];
+  
+  if (!pool) {
+    console.error('No pool found for pair:', { pairKey, reversePairKey });
+    throw new Error(`No pool found for pair ${pairKey}`);
+  }
+
+  console.log('Found pool:', pool);
+  return pool.id;
+}
+
+private calculateExecutionPrice(amountIn: Decimal, amountOut: Decimal): string {
+  if (!amountIn || amountIn.isZero()) return '0';
+  if (!amountOut) return '0';
+  
+  try {
+    return amountOut.div(amountIn).toString();
+  } catch (error) {
+    console.error('Error calculating execution price:', error);
+    return '0';
+  }
+}
+
+  async executeSwap(params: SwapParams, quote: SwapQuote): Promise<SwapResult> {
+    try {
+      if (!params.wallet) {
+        throw new Error('Wallet address is required');
+      }
+
+      const sdk = await this.raydium.initializeSdk();
+      if (!sdk) throw new Error('SDK initialization failed');
+
+      if (!quote.route?.poolId) {
+        throw new Error('Pool information is missing');
+      }
+
+      // 풀 정보 가져오기
+      const poolInfos = await sdk.liquidity.getRpcPoolInfos([quote.route.poolId]);
+      const rpcInfo = poolInfos[quote.route.poolId];
+
+      if (!rpcInfo) {
+        throw new Error('Pool information not found');
+      }
+
+      const poolKeys = await sdk.liquidity.getAmmPoolKeys(quote.route.poolId);
+
+      // 스왑 실행
+      const { execute } = await sdk.liquidity.swap({
+        poolInfo: {
+          id: quote.route.poolId,
+          baseMint: this.normalizeTokenAddress(params.tokenIn.address),
+          quoteMint: this.normalizeTokenAddress(params.tokenOut.address),
+          baseReserve: rpcInfo.baseReserve,
+          quoteReserve: rpcInfo.quoteReserve,
+          status: rpcInfo.status.toNumber(),
+          version: 4
+        },
+        poolKeys,
+        amountIn: new BN(new Decimal(params.amountIn)
+          .mul(new Decimal(10).pow(params.tokenIn.decimals))
+          .toFixed(0)),
+        amountOut: new BN(new Decimal(quote.minAmountOut)
+          .mul(new Decimal(10).pow(params.tokenOut.decimals))
+          .toFixed(0)),
+        fixedSide: 'in',
+        inputMint: this.normalizeTokenAddress(params.tokenIn.address),
+        txVersion: this.raydium.getTxVersion(),
+        computeBudgetConfig: {
+          units: 600000,
+          microLamports: 50000
+        }
+      });
+
+      const { txId } = await execute({ sendAndConfirm: true });
+
+      return {
+        txId,
+        amountIn: params.amountIn,
+        amountOut: quote.minAmountOut,
+        priceImpact: quote.priceImpact,
+        fee: quote.fee || '0'
+      };
+
+    } catch (error) {
+      console.error('Swap execution error:', error);
+      if (error instanceof Error) {
+        throw new Error(`Swap execution failed: ${error.message}`);
+      }
+      throw new Error('Failed to execute swap');
+    }
+  }
+
+  private findPoolId(tokenASymbol: string, tokenBSymbol: string): string {
+    const pairKey = `${tokenASymbol}-${tokenBSymbol}`;
+    const reversePairKey = `${tokenBSymbol}-${tokenASymbol}`;
+    
+    const pool = RAYDIUM_POOLS[pairKey] || RAYDIUM_POOLS[reversePairKey];
+    
+    if (!pool) {
+      throw new Error(`No pool found for pair ${pairKey}`);
+    }
+
+    return pool.id;
+  }
+
+  private normalizeTokenAddress(address: string): string {
+    return address === 'SOL' ? NATIVE_MINT.toString() : address;
+  }
+
+  private calculateExecutionPrice(amountIn: Decimal, amountOut: Decimal): string {
+    if (amountIn.isZero()) return '0';
+    return amountOut.div(amountIn).toString();
+  }
+
+  public getSupportedTokens(): TokenInfo[] {
+    return Object.values(SUPPORTED_TOKENS);
+  }
+}
+
+// Singleton instance
+export const swapService = new SwapService(new RaydiumService());
