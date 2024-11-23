@@ -1,18 +1,11 @@
+// middleware.ts
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-// 상수 정의
-const PROTECTED_PATHS = [
-  '/meme-coins',
-  '/airdrops',
-  '/users',
-  '/admin'
-] as const;
-
 // 분석에서 제외할 경로
-const EXCLUDED_FROM_ANALYTICS = [
+const EXCLUDED_PATHS = [
   '/api/',
   '/_next/',
   '/favicon.ico',
@@ -20,125 +13,124 @@ const EXCLUDED_FROM_ANALYTICS = [
   '/images/',
   '/assets/',
   '/robots.txt',
-  '/manifest.json',
-  '/public/'
+  '/manifest.json'
 ];
 
-// 봇 패턴
+// 봇 패턴 (더 포괄적인 목록)
 const BOT_PATTERNS = [
-  'bot', 'crawler', 'spider', 'ping', 'slurp',
-  'lighthouse', 'pagespeed', 'googlebot'
+  'bot',
+  'crawler',
+  'spider',
+  'ping',
+  'slurp',
+  'lighthouse',
+  'pagespeed',
+  'googlebot',
+  'baiduspider',
+  'yandex',
+  'bingbot',
+  'facebookexternalhit',
+  'ahrefsbot',
+  'semrushbot',
+  'voltron',
+  'scoutjet',
+  'seznambot',
+  'proximic',
+  'exabot'
 ];
 
-// 타입 정의
-type ProtectedPath = typeof PROTECTED_PATHS[number];
-interface MiddlewareConfig {
-  matcher: string[];
+// 의심스러운 접근 패턴
+const SUSPICIOUS_PATTERNS = [
+  // 비정상적인 Referer
+  (req: NextRequest) => {
+    const referer = req.headers.get('referer');
+    if (!referer) return false;
+    const currentHost = req.headers.get('host');
+    return !referer.includes(currentHost || '');
+  },
+  // 비정상적인 User-Agent
+  (req: NextRequest) => {
+    const ua = req.headers.get('user-agent')?.toLowerCase() || '';
+    return ua.length < 20 || ua.includes('curl') || ua.includes('postman');
+  },
+  // 빠른 연속 요청
+  (req: NextRequest) => {
+    // 여기에 rate limiting 로직을 추가할 수 있습니다
+    return false;
+  }
+];
+
+function isBot(userAgent: string): boolean {
+  const ua = userAgent.toLowerCase();
+  return BOT_PATTERNS.some(pattern => ua.includes(pattern));
 }
 
-/**
- * 보호된 경로인지 확인하는 함수
- */
-function isProtectedPath(pathname: string): boolean {
-  return PROTECTED_PATHS.some(path => pathname.startsWith(path));
+function isSuspiciousRequest(req: NextRequest): boolean {
+  return SUSPICIOUS_PATTERNS.some(check => check(req));
 }
 
-/**
- * 분석 제외 경로인지 확인하는 함수
- */
-function isExcludedPath(pathname: string): boolean {
-  return EXCLUDED_FROM_ANALYTICS.some(path => pathname.startsWith(path));
-}
+export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
 
-/**
- * 페이지 방문 기록 함수
- */
-async function recordPageVisit(request: NextRequest, pathname: string) {
+  // 1. 제외 경로 체크
+  if (EXCLUDED_PATHS.some(path => pathname.startsWith(path))) {
+    return NextResponse.next();
+  }
+
+  // 2. User-Agent 체크
+  const userAgent = request.headers.get('user-agent');
+  if (!userAgent || userAgent.length < 5 || isBot(userAgent)) {
+    return NextResponse.next();
+  }
+
+  // 3. 의심스러운 요청 체크
+  if (isSuspiciousRequest(request)) {
+    return NextResponse.next();
+  }
+
+  // 4. 실제 브라우저 요청인지 확인 (Optional)
+  const acceptHeader = request.headers.get('accept');
+  if (!acceptHeader?.includes('text/html')) {
+    return NextResponse.next();
+  }
+
   try {
-    // 봇 체크
-    const userAgent = request.headers.get('user-agent')?.toLowerCase() || '';
-    if (BOT_PATTERNS.some(pattern => userAgent.includes(pattern))) {
-      return;
-    }
-
     const visitorIp = request.headers.get('x-forwarded-for') || 
                      request.headers.get('x-real-ip') || 
                      'unknown';
-    const referer = request.headers.get('referer') || '';
+    const referer = request.headers.get('referer');
 
-    // API 엔드포인트 호출
-    await fetch(`${request.nextUrl.origin}/api/analytics/page-visit`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        pagePath: pathname,
-        visitorIp,
-        userAgent,
-        referer,
-      }),
-    });
+    // 5. 정상적인 페이지 로드만 기록
+    if (request.method === 'GET' && request.headers.get('sec-fetch-mode') === 'navigate') {
+      await fetch(`${request.nextUrl.origin}/api/analytics/page-visit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          pagePath: pathname,
+          visitorIp,
+          userAgent,
+          referer,
+          isDirectAccess: !referer,
+          headers: {
+            accept: acceptHeader,
+            'sec-fetch-dest': request.headers.get('sec-fetch-dest'),
+            'sec-fetch-mode': request.headers.get('sec-fetch-mode'),
+            'sec-fetch-site': request.headers.get('sec-fetch-site'),
+          }
+        }),
+      });
+    }
   } catch (error) {
     console.error('Failed to record page visit:', error);
   }
+
+  return NextResponse.next();
 }
 
-/**
- * 미들웨어 핸들러
- */
-export async function middleware(request: NextRequest): Promise<NextResponse> {
-  try {
-    // 현재 요청의 URL 정보 가져오기
-    const { pathname } = request.nextUrl;
-    
-    // 인증 쿠키 확인
-    const authCookie = request.cookies.get('auth');
-    
-    // API 경로는 제외 (API 라우트는 별도의 인증 처리)
-    if (pathname.startsWith('/api')) {
-      return NextResponse.next();
-    }
-
-    // public 폴더의 정적 파일 요청은 제외
-    if (pathname.startsWith('/public/')) {
-      return NextResponse.next();
-    }
-    
-    // 로그인이 필요한 페이지 체크
-    if (isProtectedPath(pathname)) {
-      // 인증되지 않은 경우
-      if (!authCookie?.value || authCookie.value !== 'authenticated') {
-        const url = new URL('/login', request.url);
-        url.searchParams.set('from', pathname);
-        return NextResponse.redirect(url);
-      }
-    }
-    
-    // 이미 로그인한 사용자가 로그인 페이지에 접근하는 경우
-    if (pathname === '/login' && authCookie?.value === 'authenticated') {
-      const from = request.nextUrl.searchParams.get('from');
-      const safeRedirectPath = from && isProtectedPath(from) ? from : '/';
-      return NextResponse.redirect(new URL(safeRedirectPath, request.url));
-    }
-
-    // 페이지 방문 기록 (분석 제외 경로가 아닌 경우에만)
-    if (!isExcludedPath(pathname)) {
-      await recordPageVisit(request, pathname);
-    }
-    
-    return NextResponse.next();
-  } catch (error) {
-    console.error('Middleware error:', error);
-    return NextResponse.next();
-  }
-}
-
-/**
- * 미들웨어가 실행될 경로 설정
- */
-export const config: MiddlewareConfig = {
+export const config = {
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico|public).*)',
+    '/((?!api|_next/static|_next/image|favicon.ico|robots.txt).*)',
   ],
 };
