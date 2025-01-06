@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { jwtVerify } from 'jose';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,8 +8,8 @@ export const dynamic = 'force-dynamic';
 const PROTECTED_PATHS = [
   '/meme-coins',
   '/airdrops',
-  '/users',
-  '/admin'
+  '/mmt',
+  '/manage-wallet'
 ] as const;
 
 // 분석에서 제외할 경로
@@ -55,7 +56,6 @@ function isExcludedPath(pathname: string): boolean {
  */
 async function recordPageVisit(request: NextRequest, pathname: string) {
   try {
-    // 봇 체크
     const userAgent = request.headers.get('user-agent')?.toLowerCase() || '';
     if (BOT_PATTERNS.some(pattern => userAgent.includes(pattern))) {
       return;
@@ -66,7 +66,6 @@ async function recordPageVisit(request: NextRequest, pathname: string) {
                      'unknown';
     const referer = request.headers.get('referer') || '';
 
-    // API 엔드포인트 호출
     await fetch(`${request.nextUrl.origin}/api/analytics/page-visit`, {
       method: 'POST',
       headers: {
@@ -85,60 +84,80 @@ async function recordPageVisit(request: NextRequest, pathname: string) {
 }
 
 /**
- * 미들웨어 핸들러
+ * JWT 토큰 검증 함수
  */
-export async function middleware(request: NextRequest): Promise<NextResponse> {
+async function verifyAuth(token: string) {
   try {
-    // 현재 요청의 URL 정보 가져오기
-    const { pathname } = request.nextUrl;
-    
-    // 인증 쿠키 확인
-    const authCookie = request.cookies.get('auth');
-    
-    // API 경로는 제외 (API 라우트는 별도의 인증 처리)
-    if (pathname.startsWith('/api')) {
-      return NextResponse.next();
-    }
-
-    // public 폴더의 정적 파일 요청은 제외
-    if (pathname.startsWith('/public/')) {
-      return NextResponse.next();
-    }
-    
-    // 로그인이 필요한 페이지 체크
-    if (isProtectedPath(pathname)) {
-      // 인증되지 않은 경우
-      if (!authCookie?.value || authCookie.value !== 'authenticated') {
-        const url = new URL('/login', request.url);
-        url.searchParams.set('from', pathname);
-        return NextResponse.redirect(url);
-      }
-    }
-    
-    // 이미 로그인한 사용자가 로그인 페이지에 접근하는 경우
-    if (pathname === '/login' && authCookie?.value === 'authenticated') {
-      const from = request.nextUrl.searchParams.get('from');
-      const safeRedirectPath = from && isProtectedPath(from) ? from : '/';
-      return NextResponse.redirect(new URL(safeRedirectPath, request.url));
-    }
-
-    // 페이지 방문 기록 (분석 제외 경로가 아닌 경우에만)
-    if (!isExcludedPath(pathname)) {
-      await recordPageVisit(request, pathname);
-    }
-    
-    return NextResponse.next();
+    const secret = new TextEncoder().encode(process.env.JWT_SECRET);
+    const { payload } = await jwtVerify(token, secret);
+    return payload;
   } catch (error) {
-    console.error('Middleware error:', error);
-    return NextResponse.next();
+    console.error('Token verification failed:', error);
+    return null;
   }
 }
 
-/**
- * 미들웨어가 실행될 경로 설정
- */
+export async function middleware(request: NextRequest) {
+  try {
+    const { pathname } = request.nextUrl;
+
+    // 로그인/인증 관련 경로는 검증 제외
+    const publicPaths = [
+      '/login',
+      '/api/auth/login',
+      '/api/auth/verify-email',
+      '/api/analytics/page-visit'
+    ];
+
+    if (publicPaths.some(path => pathname.startsWith(path))) {
+      return NextResponse.next();
+    }
+
+    // 세션 쿠키 확인
+    const session = request.cookies.get('user-session');
+
+    if (!session?.value) {
+      // API 요청인 경우 401 응답
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json(
+          { error: 'Authentication required' },
+          { status: 401 }
+        );
+      }
+      // 일반 페이지 접근인 경우 로그인 페이지로 리다이렉트
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+
+    // 토큰 검증
+    const verified = await verifyAuth(session.value);
+
+    if (!verified) {
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json(
+          { error: 'Invalid or expired token' },
+          { status: 401 }
+        );
+      }
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+
+    // 페이지 방문 기록 (API 요청 제외)
+    if (!pathname.startsWith('/api/') && !isExcludedPath(pathname)) {
+      await recordPageVisit(request, pathname);
+    }
+
+    return NextResponse.next();
+  } catch (error) {
+    console.error('Middleware error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
+}
+
 export const config: MiddlewareConfig = {
   matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico|public).*)',
+    '/((?!_next/static|_next/image|favicon.ico).*)',
   ],
 };

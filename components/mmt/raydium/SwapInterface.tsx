@@ -1,132 +1,99 @@
-// components/mmt/raydium/SwapInterface.tsx
+//components/mmt/raydium/swapinterface.tsx
 'use client';
-
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { 
-  Box, 
-  Card, 
-  IconButton, 
-  TextField, 
-  Button, 
+  Card,
+  CardContent,
+  TextField,
+  Button,
+  IconButton,
   Typography,
-  Alert,
+  Box,
+  useTheme,
   CircularProgress,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Slider,
-  Link,
-  useTheme
+  Alert,
+  MenuItem,
+  InputAdornment,
 } from '@mui/material';
-import { ArrowDownUp, Settings, ExternalLink } from 'lucide-react';
-import TokenSelector from './TokenSelector';
-import { TokenInfo } from '@/types/mmt/pool';
+import { ArrowDownUp, Settings, Info } from 'lucide-react';
 import { useWallet } from '@/contexts/WalletContext';
-import { SwapQuote, swapService } from '@/lib/mmt/services/swapService';
-import { getNetworkConstants } from '@/lib/mmt/constants';
+import { SwapService, swapService } from '@/lib/mmt/services/swapService';
+import { TokenInfo } from '@/types/mmt/pool';
+import { formatNumber } from '@/utils/mmt/formatters';
 
-interface SwapInterfaceProps {
-  className?: string;
-}
+const SLIPPAGE_OPTIONS = [0.1, 0.5, 1, 3];
 
-export default function SwapInterface({ className }: SwapInterfaceProps) {
+export default function SwapCard() {
   const theme = useTheme();
   const { publicKey, connectWallet } = useWallet();
-  const networkConstants = getNetworkConstants();
-  
-  // 토큰 선택 상태
   const [tokenA, setTokenA] = useState<TokenInfo | null>(null);
   const [tokenB, setTokenB] = useState<TokenInfo | null>(null);
-  
-  // 금액 입력 상태
   const [amountIn, setAmountIn] = useState<string>('');
+  const [amountOut, setAmountOut] = useState<string>('');
+  const [slippage, setSlippage] = useState<number>(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [quote, setQuote] = useState<SwapQuote | null>(null);
-  
-  // UI 상태
-  const [slippage, setSlippage] = useState<number>(1.0);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [txSignature, setTxSignature] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
 
-  // 견적 계산
-  const getQuote = useCallback(async (value: string) => {
-    if (!value || !tokenA || !tokenB || isNaN(Number(value)) || Number(value) <= 0) {
-      setQuote(null);
+  const supportedTokens = useMemo(() => swapService.getSupportedTokens(), []);
+
+  const handleAmountInChange = useCallback(async (value: string) => {
+    setAmountIn(value);
+    if (!tokenA || !tokenB || !value || isNaN(Number(value))) {
+      setAmountOut('');
       return;
     }
 
     try {
       setLoading(true);
       setError(null);
-
-      const quoteResult = await swapService.getSwapQuote({
+      const quote = await swapService.getSwapQuote({
         tokenIn: tokenA,
         tokenOut: tokenB,
         amountIn: value,
-        slippage: slippage / 100
+        slippage: slippage / 100,
+        wallet: publicKey || undefined
       });
-
-      setQuote(quoteResult);
+      setAmountOut(quote.amountOut);
     } catch (err) {
       console.error('Quote error:', err);
       setError(err instanceof Error ? err.message : 'Failed to get quote');
-      setQuote(null);
+      setAmountOut('');
     } finally {
       setLoading(false);
     }
-  }, [tokenA, tokenB, slippage]);
+  }, [tokenA, tokenB, slippage, publicKey]);
 
-  // Debounced 견적 요청
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      getQuote(amountIn);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [amountIn, getQuote]);
-
-  // 토큰 위치 변경
-  const handleSwitchTokens = useCallback(() => {
-    setTokenA(tokenB);
-    setTokenB(tokenA);
-    setAmountIn('');
-    setQuote(null);
-  }, [tokenA, tokenB]);
-
-  // 스왑 실행
   const handleSwap = async () => {
     if (!publicKey) {
       await connectWallet();
       return;
     }
 
-    if (!tokenA || !tokenB || !amountIn || !quote) {
-      setError('Please fill in all fields');
-      return;
-    }
+    if (!tokenA || !tokenB || !amountIn || !amountOut) return;
 
     try {
       setLoading(true);
       setError(null);
 
-      const result = await swapService.executeSwap(
-        {
-          tokenIn: tokenA,
-          tokenOut: tokenB,
-          amountIn,
-          slippage: slippage / 100,
-          wallet: publicKey
-        },
-        quote
-      );
+      const quote = await swapService.getSwapQuote({
+        tokenIn: tokenA,
+        tokenOut: tokenB,
+        amountIn,
+        slippage: slippage / 100,
+        wallet: publicKey
+      });
 
-      setTxSignature(result.txId);
-      
-      // Reset form
-      setAmountIn('');
-      setQuote(null);
+      const result = await swapService.executeSwap({
+        tokenIn: tokenA,
+        tokenOut: tokenB,
+        amountIn,
+        slippage: slippage / 100,
+        wallet: publicKey
+      }, quote);
 
+      console.log('Swap successful:', result);
+      // Reset form or show success message
     } catch (err) {
       console.error('Swap error:', err);
       setError(err instanceof Error ? err.message : 'Swap failed');
@@ -135,263 +102,154 @@ export default function SwapInterface({ className }: SwapInterfaceProps) {
     }
   };
 
-  // 가격 임팩트에 따른 경고 레벨
-  const priceImpactSeverity = useMemo(() => {
-    if (!quote?.priceImpact) return null;
-    if (quote.priceImpact < 1) return 'info';
-    if (quote.priceImpact < 3) return 'warning';
-    return 'error';
-  }, [quote?.priceImpact]);
-
-  // Explorer URL
-  const explorerBaseUrl = useMemo(() => {
-    return process.env.NEXT_PUBLIC_NETWORK === 'mainnet-beta'
-      ? 'https://solscan.io'
-      : 'https://solscan.io/tx';
-  }, []);
+  const switchTokens = () => {
+    setTokenA(tokenB);
+    setTokenB(tokenA);
+    setAmountIn(amountOut);
+    setAmountOut('');
+  };
 
   return (
-    <Card 
-      className={className}
-      sx={{ 
-        p: 3,
-        width: '100%',
-        background: theme.palette.background.paper,
-        borderRadius: 2,
-        boxShadow: theme.shadows[3],
-      }}
-    >
-      {/* 헤더 */}
-      <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        mb: 3
-      }}>
-        <Typography variant="h6">Swap</Typography>
-        <IconButton onClick={() => setSettingsOpen(true)}>
-          <Settings size={20} />
-        </IconButton>
-      </Box>
+    <Card sx={{
+      maxWidth: 480,
+      mx: 'auto',
+      backgroundColor: theme.palette.background.paper,
+      boxShadow: theme.shadows[3],
+      borderRadius: 2,
+    }}>
+      <CardContent>
+        <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            Swap Tokens
+          </Typography>
+          <IconButton onClick={() => setShowSettings(!showSettings)}>
+            <Settings size={20} />
+          </IconButton>
+        </Box>
 
-      {/* From 토큰 입력 */}
-      <Box sx={{ mb: 1 }}>
-        <Typography variant="subtitle2" color="textSecondary" sx={{ mb: 1 }}>
-          From
-        </Typography>
-        <Box sx={{ 
-          display: 'flex',
-          gap: 1,
-          alignItems: 'stretch'
-        }}>
+        {showSettings && (
+          <Box sx={{ mb: 3, p: 2, bgcolor: theme.palette.background.default, borderRadius: 1 }}>
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Slippage Tolerance
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              {SLIPPAGE_OPTIONS.map((value) => (
+                <Button
+                  key={value}
+                  variant={slippage === value ? 'contained' : 'outlined'}
+                  size="small"
+                  onClick={() => setSlippage(value)}
+                  sx={{ minWidth: 48 }}
+                >
+                  {value}%
+                </Button>
+              ))}
+            </Box>
+          </Box>
+        )}
+
+        <Box sx={{ mb: 2 }}>
           <TextField
-            sx={{ width: '80%' }}
+            select
+            fullWidth
+            label="You Pay"
+            value={tokenA?.symbol || ''}
+            onChange={(e) => {
+              const token = supportedTokens.find(t => t.symbol === e.target.value);
+              setTokenA(token || null);
+            }}
+            sx={{ mb: 1 }}
+          >
+            {supportedTokens.map((token) => (
+              <MenuItem key={token.address} value={token.symbol}>
+                {token.symbol}
+              </MenuItem>
+            ))}
+          </TextField>
+          
+          <TextField
+            fullWidth
             type="number"
             value={amountIn}
-            onChange={(e) => setAmountIn(e.target.value)}
-            placeholder="0.00"
-            disabled={loading}
+            onChange={(e) => handleAmountInChange(e.target.value)}
             InputProps={{
-              inputProps: { 
-                min: 0,
-                step: "any"
-              }
+              endAdornment: tokenA && (
+                <InputAdornment position="end">
+                  {tokenA.symbol}
+                </InputAdornment>
+              )
             }}
           />
-          <TokenSelector
-            selectedToken={tokenA}
-            otherToken={tokenB}
-            onSelect={setTokenA}
-            tokens={Object.values(networkConstants.TOKENS)}
-          />
         </Box>
-      </Box>
 
-      {/* 토큰 스위치 버튼 */}
-      <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'center',
-        my: 2
-      }}>
-        <IconButton
-          onClick={handleSwitchTokens}
-          disabled={loading}
-          sx={{ 
-            border: 1,
-            borderColor: theme.palette.divider,
-            p: 1
-          }}
-        >
-          <ArrowDownUp size={20} />
-        </IconButton>
-      </Box>
+        <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}>
+          <IconButton onClick={switchTokens} size="small">
+            <ArrowDownUp size={20} />
+          </IconButton>
+        </Box>
 
-      {/* To 토큰 입력 */}
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="subtitle2" color="textSecondary" sx={{ mb: 1 }}>
-          To
-        </Typography>
-        <Box sx={{ 
-          display: 'flex',
-          gap: 1,
-          alignItems: 'stretch'
-        }}>
+        <Box sx={{ mb: 3 }}>
           <TextField
-            sx={{ width: '80%' }}
-            type="number"
-            value={quote?.amountOut || ''}
-            placeholder="0.00"
+            select
+            fullWidth
+            label="You Receive"
+            value={tokenB?.symbol || ''}
+            onChange={(e) => {
+              const token = supportedTokens.find(t => t.symbol === e.target.value);
+              setTokenB(token || null);
+            }}
+            sx={{ mb: 1 }}
+          >
+            {supportedTokens.map((token) => (
+              <MenuItem key={token.address} value={token.symbol}>
+                {token.symbol}
+              </MenuItem>
+            ))}
+          </TextField>
+
+          <TextField
+            fullWidth
+            value={amountOut}
             disabled
             InputProps={{
-              inputProps: { min: 0 }
+              endAdornment: tokenB && (
+                <InputAdornment position="end">
+                  {tokenB.symbol}
+                </InputAdornment>
+              )
             }}
           />
-          <TokenSelector
-            selectedToken={tokenB}
-            otherToken={tokenA}
-            onSelect={setTokenB}
-            tokens={Object.values(networkConstants.TOKENS)}
-          />
         </Box>
-      </Box>
 
-      {/* 스왑 정보 표시 */}
-      {quote && (
-        <Box sx={{ mb: 3 }}>
-          {/* 가격 영향 */}
-          <Box sx={{ 
-            display: 'flex',
-            justifyContent: 'space-between',
-            mb: 1
-          }}>
-            <Typography variant="body2" color="textSecondary">
-              Price Impact
-            </Typography>
-            <Typography 
-              variant="body2"
-              color={
-                priceImpactSeverity === 'error' ? 'error' :
-                priceImpactSeverity === 'warning' ? 'warning.main' :
-                'textSecondary'
-              }
-            >
-              {quote.priceImpact.toFixed(2)}%
-            </Typography>
-          </Box>
-
-          {/* 최소 수령 금액 */}
-          <Box sx={{ 
-            display: 'flex',
-            justifyContent: 'space-between',
-            mb: 1
-          }}>
-            <Typography variant="body2" color="textSecondary">
-              Minimum Received
-            </Typography>
-            <Typography variant="body2">
-              {quote.minAmountOut} {tokenB?.symbol}
-            </Typography>
-          </Box>
-
-          {/* 예상 실행 가격 */}
-          <Box sx={{ 
-            display: 'flex',
-            justifyContent: 'space-between',
-            mb: 1
-          }}>
-            <Typography variant="body2" color="textSecondary">
-              Execution Price
-            </Typography>
-            <Typography variant="body2">
-              1 {tokenA?.symbol} = {quote.executionPrice} {tokenB?.symbol}
-            </Typography>
-          </Box>
-        </Box>
-      )}
-
-      {/* 에러 메시지 */}
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
-      )}
-
-      {/* 트랜잭션 성공 메시지 */}
-      {txSignature && (
-        <Alert 
-          severity="success" 
-          sx={{ mb: 2 }}
-          action={
-            <Link 
-              href={`${explorerBaseUrl}/tx/${txSignature}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              sx={{ display: 'flex', alignItems: 'center' }}
-            >
-              <ExternalLink size={16} />
-            </Link>
-          }
-        >
-          Swap successful!
-        </Alert>
-      )}
-
-      {/* 스왑 버튼 */}
-      <Button
-        fullWidth
-        variant="contained"
-        size="large"
-        disabled={loading || !tokenA || !tokenB || !amountIn || !quote}
-        onClick={handleSwap}
-        sx={{ 
-          height: 48,
-          position: 'relative'
-        }}
-      >
-        {loading ? (
-          <CircularProgress size={24} color="inherit" />
-        ) : !publicKey ? (
-          'Connect Wallet'
-        ) : !tokenA || !tokenB ? (
-          'Select Tokens'
-        ) : !amountIn || !quote ? (
-          'Enter Amount'
-        ) : (
-          'Swap'
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
         )}
-      </Button>
 
-      {/* Settings Dialog */}
-      <Dialog 
-        open={settingsOpen} 
-        onClose={() => setSettingsOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Swap Settings</DialogTitle>
-        <DialogContent>
-          <Typography gutterBottom>Slippage Tolerance</Typography>
-          <Box sx={{ px: 2 }}>
-            <Slider
-              value={slippage}
-              onChange={(_, value) => setSlippage(value as number)}
-              min={0.1}
-              max={5}
-              step={0.1}
-              marks={[
-                { value: 0.1, label: '0.1%' },
-                { value: 1, label: '1%' },
-                { value: 5, label: '5%' }
-              ]}
-              valueLabelDisplay="auto"
-              valueLabelFormat={(value) => `${value}%`}
-            />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setSettingsOpen(false)}>Close</Button>
-        </DialogActions>
-      </Dialog>
+        <Button
+          fullWidth
+          variant="contained"
+          size="large"
+          disabled={loading || !tokenA || !tokenB || !amountIn || !amountOut}
+          onClick={handleSwap}
+          sx={{
+            height: 48,
+            background: theme.palette.primary.main,
+            '&:hover': {
+              background: theme.palette.primary.dark,
+            }
+          }}
+        >
+          {loading ? (
+            <CircularProgress size={24} color="inherit" />
+          ) : !publicKey ? (
+            'Connect Wallet'
+          ) : (
+            'Swap'
+          )}
+        </Button>
+      </CardContent>
     </Card>
   );
 }

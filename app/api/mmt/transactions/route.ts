@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
       `SELECT 
         tx.id,
         tx.created_at,
-        tx.action_type,
+        tx.transaction_type,
         tx.token_a_amount,
         tx.token_b_amount,
         tx.price,

@@ -36,6 +36,18 @@ const allTabs = [
     icon: Droplets,
     description: 'Get Pool id by Coin address'
   },
+  { 
+    label: 'Swap Test', 
+    path: '/test/swap',
+    icon: Droplets,
+    description: 'Swap Test'
+  },
+  { 
+    label: 'Auth transaction Test', 
+    path: '/test/web3auth-transaction',
+    icon: Droplets,
+    description: 'Auth transaction Test'
+  },
 ];
 
 export default function TestNavigation() {

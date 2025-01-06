@@ -1,4 +1,5 @@
 // components/mmt/Dashboard.tsx
+// components/mmt/Dashboard.tsx
 import React, { useState, useEffect } from 'react';
 import { ThemeProvider } from '@mui/material/styles';
 import { 
@@ -15,7 +16,7 @@ import {
   Fade
 } from '@mui/material';
 import { X as CloseIcon } from 'lucide-react';
-import { useWallet } from '@/contexts/WalletContext';
+import { useWeb3Auth } from '@/contexts/Web3AuthContext';
 import { useAppTheme } from '@/hooks/useAppTheme';
 import { MMTProvider, useMMT } from '@/contexts/mmt/MMTContext';
 
@@ -52,7 +53,8 @@ const logStep = (step: string, data?: any) => {
 function DashboardContent() {
   const theme = useAppTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  const { publicKey, network } = useWallet();
+  const { isAuthenticated, user: web3authUser } = useWeb3Auth();
+  const network = process.env.NEXT_PUBLIC_NETWORK || 'devnet';
   const { selectedPool, error: mmtError, isLoading, pools } = useMMT();
   
   const [alerts, setAlerts] = useState<DashboardAlert[]>([]);
@@ -71,12 +73,11 @@ function DashboardContent() {
     const walletAlert: DashboardAlert = {
       id: 'wallet-connect',
       type: 'warning',
-      message: '거래를 시작하려면 지갑을 연결하세요',
+      message: '거래를 시작하려면 로그인하세요',
       autoHide: false
     };
 
-    //logStep('Wallet connection check', { connected: !!publicKey });
-    if (!publicKey) {
+    if (!isAuthenticated || !web3authUser?.wallet) {
       setAlerts(prev => {
         if (!prev.find(alert => alert.id === walletAlert.id)) {
           return [...prev, walletAlert];
@@ -86,12 +87,11 @@ function DashboardContent() {
     } else {
       setAlerts(prev => prev.filter(alert => alert.id !== walletAlert.id));
     }
-  }, [publicKey]);
+  }, [isAuthenticated, web3authUser]);
 
   // MMT 에러 감지
   useEffect(() => {
     if (mmtError) {
-      //logStep('MMT error detected', { error: mmtError });
       setAlerts(prev => [
         ...prev,
         {
@@ -108,7 +108,6 @@ function DashboardContent() {
   useEffect(() => {
     const autoHideAlerts = alerts.filter(alert => alert.autoHide);
     if (autoHideAlerts.length > 0) {
-      //logStep('Setting up auto-hide alerts', { count: autoHideAlerts.length });
       const timers = autoHideAlerts.map(alert => 
         setTimeout(() => {
           handleDismissAlert(alert.id);
@@ -123,7 +122,6 @@ function DashboardContent() {
 
   // 알림 제거 핸들러
   const handleDismissAlert = (alertId: string) => {
-    //logStep('Dismissing alert', { alertId });
     setAlerts(prev => prev.filter(alert => alert.id !== alertId));
   };
 
@@ -259,7 +257,6 @@ function DashboardContent() {
                   <MarketStats />
                 </Paper>
               </Grid>
-
 
               {/* Order Book */}
               <Grid item xs={12}>

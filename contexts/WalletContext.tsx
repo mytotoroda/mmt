@@ -1,55 +1,36 @@
+// contexts/WalletContext.tsx
 'use client'
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import { Connection, clusterApiUrl } from '@solana/web3.js';
+import { Connection, clusterApiUrl, Transaction } from '@solana/web3.js';
+import { useWeb3Auth } from './Web3AuthContext';
+import { SolanaWallet } from './Web3AuthContext';
 
 // Network 타입 정의
 export type NetworkType = 'mainnet-beta' | 'devnet';
 
-// Phantom 지갑 타입 정의
-interface PhantomWallet {
-  connect: (args?: { onlyIfTrusted: boolean }) => Promise<{ publicKey: { toString: () => string } }>;
-  disconnect: () => Promise<void>;
-  on: (event: string, callback: (args?: any) => void) => void;
-  removeAllListeners: (event: string) => void;
-  publicKey?: { toString: () => string };
-}
-
-// Window 타입 확장
-declare global {
-  interface Window {
-    solana?: PhantomWallet;
-  }
-}
-
 // 컨텍스트 값 타입 정의
 interface WalletContextValue {
-  wallet: PhantomWallet | null;
   publicKey: string | null;
-  connectWallet: () => Promise<void>;
-  disconnectWallet: () => Promise<void>;
   network: NetworkType;
   connection: Connection;
+  isConnected: boolean;
+  signAndSendTransaction: (transaction: Transaction) => Promise<string>;
+  signTransaction: (transaction: Transaction) => Promise<Transaction>;
 }
 
-// Provider Props 타입 정의
-interface WalletProviderProps {
-  children: ReactNode;
-}
-
-// 상수 정의
-const DEFAULT_NETWORK: NetworkType = 'devnet';
+const WalletContext = createContext<WalletContextValue | null>(null);
 
 // 유틸리티 함수들
 const getNetwork = (): NetworkType => {
   const network = process.env.NEXT_PUBLIC_NETWORK as NetworkType;
-  if (network !== 'mainnet-beta' && network !== 'devnet') {
-    return DEFAULT_NETWORK;
-  }
-  return network;
+  return network === 'mainnet-beta' ? 'mainnet-beta' : 'devnet';
 };
 
 const getEndpoint = (network: NetworkType): string => {
-  return clusterApiUrl(network);
+  if (network === 'mainnet-beta') {
+    return process.env.NEXT_PUBLIC_MAINNET_RPC_URL || clusterApiUrl('mainnet-beta');
+  }
+  return process.env.NEXT_PUBLIC_DEVNET_RPC_URL || clusterApiUrl('devnet');
 };
 
 const createConnection = (network: NetworkType): Connection => {
@@ -57,120 +38,72 @@ const createConnection = (network: NetworkType): Connection => {
   return new Connection(endpoint, 'confirmed');
 };
 
-// 컨텍스트 생성
-const WalletContext = createContext<WalletContextValue | null>(null);
-
-export function WalletProvider({ children }: WalletProviderProps) {
-  const [wallet, setWallet] = useState<PhantomWallet | null>(null);
-  const [publicKey, setPublicKey] = useState<string | null>(null);
+export function WalletProvider({ children }: { children: ReactNode }) {
+  const { user, provider } = useWeb3Auth();
+  const [wallet, setWallet] = useState<SolanaWallet | null>(null);
   const network = getNetwork();
   const [connection] = useState(() => createConnection(network));
 
-  // Phantom 지갑 이벤트 리스너 설정
+  // provider가 변경될 때마다 wallet 인스턴스 업데이트
   useEffect(() => {
-    const { solana } = window;
-    if (solana) {
-      setWallet(solana);
-
-      const handleConnect = () => {
-        console.log(`Wallet connected on ${network}`);
-        if (solana.publicKey) {
-          const publicKeyString = solana.publicKey.toString();
-          setPublicKey(publicKeyString);
-          localStorage.setItem('walletConnected', 'true');
-        }
-      };
-
-      const handleDisconnect = () => {
-        console.log("Wallet disconnected");
-        setPublicKey(null);
-        localStorage.removeItem('walletConnected');
-      };
-
-      const handleAccountChanged = (publicKey: { toString: () => string } | null) => {
-        if (publicKey) {
-          console.log("Account changed:", publicKey.toString());
-          setPublicKey(publicKey.toString());
-          localStorage.setItem('walletConnected', 'true');
-        } else {
-          setPublicKey(null);
-          localStorage.removeItem('walletConnected');
-        }
-      };
-
-      solana.on('connect', handleConnect);
-      solana.on('disconnect', handleDisconnect);
-      solana.on('accountChanged', handleAccountChanged);
-
-      // 컴포넌트 언마운트 시 이벤트 리스너 제거
-      return () => {
-        solana.removeAllListeners('connect');
-        solana.removeAllListeners('disconnect');
-        solana.removeAllListeners('accountChanged');
-      };
+    if (provider) {
+      const solanaWallet = new SolanaWallet(provider);
+      setWallet(solanaWallet);
+    } else {
+      setWallet(null);
     }
-  }, [network]);
+  }, [provider]);
 
-  // 초기 자동 연결
-  useEffect(() => {
-    const autoConnect = async (): Promise<void> => {
-      try {
-        const { solana } = window;
-        if (solana && localStorage.getItem('walletConnected') === 'true') {
-          const response = await solana.connect({ onlyIfTrusted: true });
-          setPublicKey(response.publicKey.toString());
-        }
-      } catch (error) {
-        console.error("자동 연결 실패:", error);
-        localStorage.removeItem('walletConnected');
+  // Transaction 타입을 명시적으로 사용하는 메서드들
+const signAndSendTransaction = async (transaction: Transaction): Promise<string> => {
+  if (!wallet || !provider) throw new Error('Wallet not initialized');
+
+  try {
+    // 1. 트랜잭션 직렬화
+    const serializedTransaction = transaction.serialize({
+      requireAllSignatures: false,
+      verifySignatures: false
+    });
+
+    // 2. Web3Auth provider를 통해 트랜잭션 서명
+    const signedTx = await provider.request({
+      method: "signTransaction",
+      params: {
+        transaction: Buffer.from(serializedTransaction).toString('base64')
       }
-    };
+    });
 
-    autoConnect();
-  }, []);
+    // 3. 서명된 트랜잭션 전송
+    const signature = await connection.sendRawTransaction(
+      Buffer.from(signedTx as string, 'base64')
+    );
 
-  const connectWallet = async (): Promise<void> => {
-    try {
-      if (wallet) {
-        if (network === 'mainnet-beta') {
-          const confirm = window.confirm(
-            '메인넷에 연결하시겠습니까? 실제 SOL이 사용될 수 있습니다.'
-          );
-          if (!confirm) return;
-        }
-        const response = await wallet.connect();
-        setPublicKey(response.publicKey.toString());
-        localStorage.setItem('walletConnected', 'true');
-      } else {
-        window.open('https://phantom.app/', '_blank');
-      }
-    } catch (error) {
-      console.error("지갑 연결 실패:", error);
-      localStorage.removeItem('walletConnected');
-    }
-  };
+    // 4. 트랜잭션 확인 대기
+    await connection.confirmTransaction(signature);
 
-  const disconnectWallet = async (): Promise<void> => {
-    try {
-      if (wallet) {
-        await wallet.disconnect();
-        setPublicKey(null);
-        localStorage.removeItem('walletConnected');
-      }
-    } catch (error) {
-      console.error("지갑 연결 해제 실패:", error);
-    }
+    return signature;
+  } catch (error) {
+    console.error('Error in signAndSendTransaction:', error);
+    throw error;
+  }
+};
+
+///////////////////////////////////
+
+  const signTransaction = async (transaction: Transaction): Promise<Transaction> => {
+    if (!wallet) throw new Error('Wallet not initialized');
+    return await wallet.signTransaction(transaction);
   };
 
   return (
-    <WalletContext.Provider 
-      value={{ 
-        wallet, 
-        publicKey, 
-        connectWallet, 
-        disconnectWallet,
+    <WalletContext.Provider
+      value={{
+        publicKey: user?.wallet || null,
         network,
-        connection
+        connection,
+        isConnected: Boolean(user?.wallet),
+        signAndSendTransaction,
+        signTransaction,
       }}
     >
       {children}
@@ -178,7 +111,6 @@ export function WalletProvider({ children }: WalletProviderProps) {
   );
 }
 
-// Hook
 export function useWallet(): WalletContextValue {
   const context = useContext(WalletContext);
   if (!context) {

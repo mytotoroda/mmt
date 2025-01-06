@@ -14,7 +14,7 @@ export async function GET() {
       `SELECT t.*, m.token_a_symbol, m.token_b_symbol
        FROM mmt_transactions t
        JOIN mmt_pools m ON t.pool_id = m.id
-       WHERE t.action_type = 'REBALANCE'
+       WHERE t.transaction_type = 'REBALANCE'
        ORDER BY t.created_at DESC
        LIMIT 10`
     );

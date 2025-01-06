@@ -6,7 +6,7 @@ export default function Footer() {
         <div className="flex flex-col md:flex-row justify-between items-center">
           {/* 저작권 정보 */}
           <div className="text-sm text-gray-600 dark:text-gray-400">
-            © 2024 Solana Meme Coin Manager. All rights reserved.
+            © Solana Meme Token Market Making Tool.
           </div>
           
           {/* 소셜 링크 */}

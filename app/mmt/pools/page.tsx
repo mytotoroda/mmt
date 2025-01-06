@@ -1,5 +1,4 @@
 'use client';
-
 import { useState } from 'react';
 import { 
   Box, 
@@ -8,7 +7,7 @@ import {
   Typography,
   useTheme
 } from '@mui/material';
-import { useWallet } from '@/contexts/WalletContext';
+import { useWeb3Auth } from '@/contexts/Web3AuthContext';  // Web3Auth import로 변경
 import { Pool } from '@/types/mmt/pool';
 import {
   PoolHeader,
@@ -26,12 +25,21 @@ import LoadingOverlay from '@/components/common/LoadingOverlay';
 
 export default function MMTPools() {
   const theme = useTheme();
-  const { publicKey, network, connection } = useWallet();
+  // Web3Auth 관련 상태 가져오기
+  const { 
+    isAuthenticated,
+    user: web3authUser,
+    provider
+  } = useWeb3Auth();
+
   const { pools, loading, error, setError, fetchPools } = usePoolData();
   const { togglePoolStatus, handleRefresh } = usePoolActions({ fetchPools, setError });
   
   const [isNewPoolOpen, setIsNewPoolOpen] = useState(false);
   const [editPool, setEditPool] = useState<Pool | null>(null);
+
+  // network 정보 가져오기
+  const network = process.env.NEXT_PUBLIC_NETWORK || 'devnet';
 
   return (
     <Box 
@@ -56,18 +64,15 @@ export default function MMTPools() {
             onRefresh={handleRefresh}
             onNewPool={() => setIsNewPoolOpen(true)}
             loading={loading}
-            isWalletConnected={!!publicKey}
+            isWalletConnected={isAuthenticated && !!web3authUser?.wallet}
           />
-
           <NetworkWarning network={network} />
-
           {error && (
             <ErrorAlert 
               error={error} 
               onClose={() => setError(null)} 
             />
           )}
-
           {!loading && pools.length === 0 ? (
             <Box 
               sx={{ 
@@ -94,10 +99,8 @@ export default function MMTPools() {
             </>
           )}
         </Paper>
-
         <NetworkStatus network={network} />
-
-        {publicKey && (
+        {isAuthenticated && web3authUser?.wallet && (
           <>
             <NewPoolDialog 
               open={isNewPoolOpen}
@@ -106,8 +109,8 @@ export default function MMTPools() {
                 fetchPools();
                 setIsNewPoolOpen(false);
               }}
-              walletPublicKey={publicKey}
-              connection={connection}
+              walletPublicKey={web3authUser.wallet}
+              connection={provider} // Web3Auth provider 사용
             />
             {editPool && (
               <EditPoolDialog
@@ -118,13 +121,12 @@ export default function MMTPools() {
                   fetchPools();
                   setEditPool(null);
                 }}
-                walletPublicKey={publicKey}
-                connection={connection}
+                walletPublicKey={web3authUser.wallet}
+                connection={provider} // Web3Auth provider 사용
               />
             )}
           </>
         )}
-
         {loading && <LoadingOverlay />}
       </Container>
     </Box>

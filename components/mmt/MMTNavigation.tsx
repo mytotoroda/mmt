@@ -25,55 +25,49 @@ import {
 
 const allTabs = [
   { 
-    label: '대시보드', 
+    label: 'Dashboard', 
     path: '/mmt',
     icon: LineChart,
-    description: '실시간 마켓메이킹 현황 모니터링'
+    description: 'Real-time market making monitoring'
   },
   { 
-    label: '풀 관리', 
+    label: 'Pool Detail', 
+    path: '/mmt/pool',
+    icon: Droplets,
+    description: 'Create and manage liquidity pools'
+  },
+  { 
+    label: 'Pool Management', 
     path: '/mmt/pools',
     icon: Droplets,
-    description: '유동성 풀 생성 및 관리'
+    description: 'Create and manage liquidity pools'
   },
   { 
-    label: '전략 설정', 
+    label: 'Strategy Settings', 
     path: '/mmt/strategy',
     icon: Settings2,
-    description: '마켓메이킹 전략 설정 및 관리'
+    description: 'Set up and manage market making strategies'
   },
   { 
-    label: '주문 관리', 
+    label: 'Orders', 
     path: '/mmt/orders',
     icon: ListFilter,
-    description: '실시간 주문 모니터링 및 관리'
+    description: 'Monitor and manage real-time orders'
   },
   { 
-    label: '포지션', 
+    label: 'Positions', 
     path: '/mmt/positions',
     icon: BarChart2,
-    description: '토큰 포지션 및 수익률 분석'
-  },
-
-  { 
-    label: '지갑 관리', 
-    path: '/mmt/wallets',
-    icon: Wallet,
-    description: '거래 지갑 설정 및 관리'
+    description: 'Analyze token positions and profitability'
   },
   { 
-    label: '설정', 
+    label: 'Settings', 
     path: '/mmt/settings',
     icon: Settings,
-    description: '시스템 설정 및 환경 설정'
-  },
-  {
-  label: '성과 분석',
-  path: '/mmt/performance',
-  icon: BarChart2,
-  description: '포지션 성과 분석 및 리밸런싱 효과'
+    description: 'System and environment settings'
   },
 ];
+
 
 export default function MMTNavigation() {
   const router = useRouter();
