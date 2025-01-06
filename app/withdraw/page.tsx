@@ -4,6 +4,9 @@ import { useState, useEffect } from 'react';
 import { useWeb3Auth } from '@/contexts/Web3AuthContext';
 import { useWallet } from '@/contexts/WalletContext';
 import { SolanaWallet } from '@/contexts/Web3AuthContext';
+import { CustomChainConfig, IProvider } from "@web3auth/base";
+import { SolanaWallet as Web3SolanaWallet } from "@web3auth/solana-provider";
+
 import { 
   Card, 
   CardContent, 
@@ -22,7 +25,7 @@ import {
   Link,
   Divider
 } from '@mui/material';
-import { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL } from '@solana/web3.js';
+import { PublicKey, SystemProgram, Transaction, LAMPORTS_PER_SOL, Connection } from '@solana/web3.js';
 
 interface WithdrawalHistory {
   id: number;
@@ -39,7 +42,7 @@ export default function WithdrawPage() {
   const [destinationAddress, setDestinationAddress] = useState('7TVfvpf5hrMSWWYZs1Ayc2gzwhwamrF8axPGSKJC1PCr');
   const [amount, setAmount] = useState('0.001');
 
-  const { user,provider } = useWeb3Auth();
+  const { user,provider,web3auth } = useWeb3Auth();
   const { publicKey, connection, signAndSendTransaction } = useWallet();
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -106,46 +109,39 @@ const handleWithdraw = async () => {
     if (balance === null || lamports > balance * LAMPORTS_PER_SOL) {
       throw new Error('Insufficient balance');
     }
+        const solanaWallet = new Web3SolanaWallet(web3auth!.provider!);
 
-    const transaction = new Transaction();
-    
-    transaction.add(
-      SystemProgram.transfer({
-        fromPubkey: new PublicKey(publicKey),
-        toPubkey: toPublicKey,
-        lamports: Math.floor(lamports),
-      })
-    );
+    const accounts = await solanaWallet.requestAccounts();
 
-    const { blockhash } = await connection.getLatestBlockhash();
-    transaction.recentBlockhash = blockhash;
-    transaction.feePayer = new PublicKey(publicKey);
-
-    // Web3Auth provider로 트랜잭션 서명 및 전송
-    const serializedMessage = transaction.serializeMessage();
-    const messageBase64 = Buffer.from(serializedMessage).toString('base64');
-	
-	console.log(provider,"provider")
-
-    const signedTx = await provider.request({
-      method: "signTransaction",
-      params: {
-        message: messageBase64
-      }
+    const connectionConfig = await solanaWallet.request<
+      string[],
+      CustomChainConfig
+    >({
+      method: "solana_provider_config",
+      params: [],
     });
-	
-	console.log(signedTx,"signedTx")
-     const signature = await connection.sendRawTransaction(
-      Buffer.from(signedTx as string, 'base64')
+    const connection = new Connection(connectionConfig.rpcTarget);
+
+    const block = await connection.getLatestBlockhash("finalized");
+
+    const TransactionInstruction = SystemProgram.transfer({
+      fromPubkey: new PublicKey(accounts[0]),
+      toPubkey: toPublicKey,
+      lamports:lamports,
+    });
+
+    const transaction = new Transaction({
+      blockhash: block.blockhash,
+      lastValidBlockHeight: block.lastValidBlockHeight,
+      feePayer: new PublicKey(accounts[0]),
+    }).add(TransactionInstruction);
+
+    const { signature } = await solanaWallet.signAndSendTransaction(
+      transaction,
     );
 
-    // 트랜잭션 확인
-    const confirmation = await connection.confirmTransaction(signature as string);
-    
-    if (confirmation.value.err) {
-      throw new Error('Transaction failed');
-    }
-
+    return signature;
+   
     // DB에 출금 기록 저장
     const response = await fetch('/api/withdraw', {
       method: 'POST',
